@@ -1,0 +1,27 @@
+<?xml version="1.0" standalone="yes"?> 
+<policies>
+    <policy id="AUTOPOLICY-TEST" peer-as="31042" family="inet">
+	<term action="permit" id="peer">
+	    <match>
+	        <protocol>bgp</protocol>
+		<prefix-list match="orlonger" upto="24" include="yes" update="yes">^31042$</prefix-list>
+	    </match>
+	    <set>
+		<local-preference>300</local-preference>
+		<community action="add" id="peer-prefixes">65535:100</community>
+		<community action="add" id="advertise-to-customers">65535:200</community>
+	    </set>
+	</term>
+	<term action="permit" id="peers-customers">
+	    <match>
+	        <protocol>bgp</protocol>
+		<prefix-list match="orlonger" upto="24" include="yes" update="yes">^(?!31042)\d+$</prefix-list>
+	    </match>
+	    <set>
+		<local-preference>200</local-preference>
+		<community action="add" id="peer-prefixes">65535:100</community>
+		<community action="add" id="advertise-to-customers">65535:200</community>
+	    </set>
+	</term>
+    </policy>
+</policies>

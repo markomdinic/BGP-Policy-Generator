@@ -1,0 +1,374 @@
+
+Templates are policy configuration layouts expressed in generic XML to separate
+policy semantics from device-specific syntax. You can define your policy once
+and produce any device-specific version of it whenever required. That way you
+can migrate between different vendors without actually changing the logic
+underneath. Also, some policies may have to be applied to more than one device
+at a time, possibly from different vendors. Defining your policies as templates
+saves you from defining different syntax versions of the same thing.
+
+To make things simpler, templates use different tags and attributes as little
+as possible. Not all tags or attributes are applicable in all scenarios. Although
+general structure of policies is similar between different platforms, some things
+are vendor-specific, or simply defined in different places. To keep templates as
+universal as possible, device-specific configuration generators ignore unsupported
+features present in templates.
+
+Policy template
+===============
+
+This is what a single policy template file looks like:
+
+<?xml version="1.0" standalone="yes"?>
+<policies>
+    <policy id="POLICY_NAME">
+        <term action="permit|deny" id="NAME_OF_THIS_POLICY_TERM">
+            <match>
+                <family>inet|inet6</family>
+                <protocol id="ROUTING_PROCESS_ID">PROTOCOL_NAME</protocol>
+                <prefix-list match="exact|longer|orlonger" include="yes|no">PREFIX_LIST_NAME</prefix-list>
+                <as-path id="AS_PATH_ACCESS_LIST_NAME_OR_NUMBER">AS-PATH-REGEX</as-path>
+                <neighbor id="NAME_OF_ACL_MATCHING_THIS_NEIGHBOR">NEIGHBOR_ADDRESS</neighbor>
+                <community>COMMUNITY_LIST_NAME</community>
+            </match>
+            <set>
+                <prepend>AS_PATH_PREPEND_STRING</prepend>
+                <local-preference action="set|add|subtract">LOCAL_PREFERENCE_AMOUNT</local-preference>
+                <protocol-preference action="set|add|subtract">PREFERENCE_AMOUNT</protocol-preference>
+                <community action="set|add|delete" id="yunet-communities">COMMUNITY</community>
+                <next-hop>self|reject|discard|peer-address|NEXT_HOP_ADDRESS</next-hop>
+                <origin>igp|egp|incomplete</origin>
+                <weight>WEIGHT_AMOUNT</weight>
+                <med>METRIC_AMOUNT</med>
+            </set>
+        </term>
+        <term ...>
+           ...
+        </term>
+    </policy>
+</policies>
+
+Tag <policy> begins the policy definition. It contains one or more policy elements
+specified within <term> tags. Takes 1 mandatory attribute:
+
+ id - Unique policy identifier. In most cases, device-specific generators use this
+      attribute as policy name.
+
+Tag <term> defines a policy element that contains a set of match-set clauses bound
+together by logical AND, while the <term> tags themselves are bound together by
+logical OR. The order in which <term> tags are specified is the order in which prefixes
+are matched against them. In other words, if all match clauses evaluate to TRUE, then
+the term itself evaluates to TRUE and all the term's set clauses and the specified
+action are applied to matching prefixes. If term evaluates to FALSE, then the next
+term is processed. For example, <term> directly maps to JunOS's policy-statement term
+and IOS's route-map <seq> <permit|deny> statement.
+
+Tag <term> takes 2 mandatory attributes:
+
+ id     - Unique term identifier within a single policy. It most commonly maps
+          to the name of a policy element, depending on the target platform.
+          On the other hand, some platforms, like IOS, don't use this attribute
+          at all.
+
+ action - Defines what happens with routes that match the term. If set to 'permit',
+          routes are accepted. If set to 'deny', routes are discarded.
+
+Tags <match> and <set> contain lists of match conditions and route transformation
+operations respectively. Neither takes any attributes and the order in which they
+are specified within a <term> is not significant. While processing a policy element,
+match conditions specified within <match> tag are always processed first and only
+if the entire <match> evaulates to TRUE and parent term's action is 'permit', set
+operations specified within <set> tag are applied.
+
+Match conditions are defined by the following tags:
+
+ <prefix-list>  - Matches the route itself.
+                - This is the most important match condition.
+                - Tag's value specifies prefix list's name.
+                - Prefix lists themselves can also be defined via templates
+                  or be configured elsewhere and referenced here by name.
+                - Takes 1 mandatory attribute:
+
+                     'match' - the type of matching performed on routes:
+                               'exact'    matches routes exactly as specified
+                                          by prefix list definition,
+                               'longer'   matches routes more specific than
+                                          prefixes specified by prefix list,
+                               'orlonger' matches routes exact and more specific
+                                          than prefixes specified by prefix list.
+
+                - Takes 1 optional attribute:
+
+                     'include' - Determines whether prefix list definition should
+                                 be included in output when generating policy
+                                 configuration. Can be 'yes' or 'no'. If set to
+                                 'no', only the policy itself is generated. If set
+                                 to 'yes', prefix lists are generated along with
+                                 the policy. Default is 'no'.
+
+ <family>       - Matches the address family of a route.
+                - Tag's value can be 'inet' or 'inet6'.
+                - Doesn't take any attributes.
+
+ <protocol>     - Matches the source protocol of a route.
+                - Value can be one of the following:
+
+                     connected (direct)
+                     static
+                     local
+                     aggregate
+                     rip
+                     ripng
+                     bgp
+                     ospf (ospf2)
+                     ospf3
+                     eigrp
+                     isis
+
+                - Takes 1 mandatory attribute:
+
+                     'id' - Router process ID. Not used on all platforms.
+
+ <as-path>      - Matches the as-path of a route.
+                - Tag's value specifies as-path regular expression, used on
+                  some platforms while others use indirect approach - ACLs.
+                - Takes 1 mandatory attribute:
+
+                     'id' - Unique identifier of the as-path access list
+                            when used on platforms that use ACLs instead of
+                            as-path regular expressions embedded in polcy.
+                            It can be a name or a numeric identifier,
+                            depending on the target platform.
+
+ <community>    - Matches a set of communities routes are tagged with.
+                - Tag's value specifies the name of a community list.
+                - Community lists themselves are defined elsewhere and their
+                  format is beyond the scope of this document.
+                - Takes no attributes.
+
+ <neighbor>     - Matches the source of a route.
+                - Tag's value specifies the address of a BGP peer, used on 
+                  some platforms, while others refer to neighbors via ACLs.
+                - Takes 1 mandatory attribute:
+
+                     'id' - Unique identifier of the access list matching
+                            BGP peer's address when used on platforms that
+                            use ACLs instead of directly specifying peer's
+                            address in policy definition.
+
+
+Route property transformation operations are defined by the following tags:
+
+ <prepend>              - Prepends one or more ASNs to route's as-path.
+                        - Tag's value specifies the prepend string.
+                        - Takes no attributes.
+
+ <local-preference>     - Sets route's local preference.
+                        - Tag's value specifies the local preference value,
+                          either absolute or relative.
+                        - Takes 1 optional attribute, not applicable on all
+                          platforms:
+
+                           'action' - Operator performed on route's local 
+                                      preference:
+                                      'set'      sets route's local preference
+                                                 to the specified value,
+                                      'add'      adds specified value to
+                                                 route's local preference,
+                                      'subtract' subtracts specified value
+                                                 from route's local preference.
+
+ <protocol-preference>  - Sets route's protocol preference (administrative
+                          distance). Not applicable on all platforms.
+                        - Tag's value specifies the protocol preference value,
+                          either absolute or relative.
+                        - Takes 1 optional attribute:
+
+                           'action' - Operator performed on route's protocol
+                                      preference:
+                                      'set'      sets route's protocol preference
+                                                 to the specified value,
+                                      'add'      adds specified value to route's
+                                                 protocol preference,
+                                      'subtract' subtracts specified value from
+                                                 route's protocol preference.
+
+ <med>                  - Sets route's Multi-Exit Discriminator.
+                        - Tag's value specifies the MED value directly.
+                        - Takes no attributes.
+
+ <weight>               - Sets vendor-specific non-transitive metric.
+                        - Maps to (very) different things on different platforms.
+                        - Tag's value specifies the weight value directly.
+                        - Takes no attributes.
+
+ <community>            - Tags matching routes with specified community.
+                        - Tag's value specifies the community directly.
+                        - Takes 1 mandatory attribute:
+
+                           'id'     - Unique identifier of the community list
+                                      when used on platforms that reference
+                                      communities via community lists.
+
+                        - Takes 1 optional attribute:
+
+                           'action' - Operator performed on route's communities:
+                                      'set'      sets route's communities,
+                                      'add'      adds specified communities to
+                                                 the existing set of communities,
+                                      'delete'   deletes specified communities from
+                                                 the existing set of communities.
+
+ <next-hop>             - Sets the next hop of a route.
+                        - Tag's value specifies the next-hop directly.
+                          It can be one of the folloeing:
+
+                           'self'         - Set next-hop to ourselves
+                           'discard'      - Set next-hop to drop the traffic
+                           'reject'       - Set next-hop to drop the traffic and
+                                            respond with ICMP unreachable.
+                           'peer-address' - Set next-hop to the address of the peer
+                                            that announced the route.
+                           IP address     - Set next-hop explicitly to the specified
+                                            IPv4/IPv6 address.
+
+ <origin>               - Sets the origin protocol of a route.
+                        - Tag's value specifies the origin directly.
+                          It can be one of the following:
+
+                            'igp'         - set route's origin to IGP
+                            'egp'         - set route's origin to EGP
+                            'incomplete'  - set route's origin to incomplete
+
+                          Not all values are supported on all platforms.
+
+Prefix list template
+====================
+
+This is what a single prefix list template file looks like:
+
+<?xml version="1.0" standalone="yes"?> 
+<prefix-lists>
+    <prefix-list id="PREFIX_LIST_NAME" family="inet|inet6" origin="PREFIX_LIST_ORIGIN_ASN">
+        <item upto="MAX_PREFIX_LEN">PREFIX1</item>
+        <item upto="MAX_PREFIX_LEN">PREFIX2</item>
+        <item upto="MAX_PREFIX_LEN">PREFIX3</item>
+    </prefix-list>
+</prefix-lists>
+
+This is self-explanatory (more or less).
+
+Tag <prefix-list>  begins prefix list definition. It takes 2 mandatory attributes:
+
+ 'id'      - the unique prefix list identifier, in most cases - the name
+ 'family'  - address family of prefixes within prefix list. Can be 'inet' for
+             IPv4 prefixes or 'inet6' for IPv6 prefixes.
+
+Takes 1 optional attribute:
+
+ 'origin'  - ASN that originated prefixes within prefix list. Only informational.
+
+Tag <item> defines each member prefix. Tag's value contains the IPv4 or IPv6 prefix,
+depending on the address family of the prefix list. Takes one optional attribute:
+
+ 'upto'   - Maximum prefix length of routes matching this prefix.
+
+
+Free-form device-specific configuration
+=======================================
+
+In case templates are not flexibile enough for your needs, both policy and prefix list
+templates support <config> tag that allows you to specify device-specific configuration
+by hand. This tag can be used in various places within templates:
+
+<policies>
+    <policy>
+        <config platform="..." action="prepend">
+        <term>
+            <config platform="..." action="prepend">
+            <match>
+                <config platform="..." action="prepend">
+                ...
+                <config platform="..." action="append">
+            </match>
+            <set>
+                <config platform="..." action="prepend">
+                ...
+                <config platform="..." action="append">
+            </set>
+            <config platform="..." action="append">
+        </term>
+        <config platform="..." action="append">
+    </policy>
+</policies>
+
+
+<prefix-lists>
+    <prefix-list>
+        <config platform="..." action="prepend">
+        ...
+        <config platform="..." action="append">
+    </prefix-list>
+</prefix-lists>
+
+Both 'platform' and 'action' attributes are mandatory:
+
+ 'platform'  - Target platform for this free-form configuration. Only tags matching
+               the platform whose configuration is being generated will be used.
+               Others are ignored. That way you can insert free-form configuration
+               for multiple platforms.
+
+ 'action'    - Where to put contents of this tag:
+
+                 'prepend'   - Insert before other content within current hierarchy
+                 'append'    - Add after other content within current hierarchy
+
+The value of a <config> tag can be any text of any size. Bear in mind, though, that
+if you want to insert XML, HTML or anything that uses XML-like tags, you need to embed
+it inside <![CDATA[  ... ]]> tag.
+
+Auto-policy template
+====================
+
+It is basically the same as policy template and most of it is copied as is when
+generating policy templates from it. However, there are a few differences:
+
+Tag <policy> uses 2 mandatory attributes:
+
+ 'peer-as' - ASN of the BGP neighbor this policy is applied to. It is used to fetch
+             prefixes specified AS announces to AS defined as 'local_as' in config.php.
+
+ 'family'  - Used to determine the address family of generated prefix lists. It can
+             either be 'inet' for IPv4 prefixes, or 'inet6' for IPv6.
+
+Tag <prefix-list> within <match> tag takes additional attributes 'upto' and 'update'.
+Also, the value of this tag is not a prefix list name, but a regexp. When generating
+policies using autopolicy template, this tag is used to specify which prefix lists
+should be generated and what <prefix-list> tag should look like in generated policy.
+
+<prefix-list match="exact|longer|orlonger" upto="MAXIMUM_PREFIX_LENGTH" include="yes|no" update="yes|no">ASN_REGEX</prefix-list>
+
+Attribute update="yes" makes this tag a template tag from which actual <prefix-list>
+tags are generated. If this attribute is not present or set to "no", tag is treated
+as static and simply copied as is.
+
+Attribute upto="MAX_PREFIX_LEN" defines maximum prefix length for prefixes contained
+in generated prefix lists, where applicable. For example, JunOS prefix lists do not
+specify max prefix length, therefore this attribute is ignored when generating JunOS
+configuration. In contrast, IOS prefix lists specify max prefix length for each member
+prefix, thus autopolicy generator makes use of this attribute when generating prefix
+list templates.
+
+So, this tag's effect is two-fold:
+
+ 1) it is used to generate prefix-list templates
+ 2) it is used as a template for actual prefix-list tags that will take it's place
+    in generated policy template. Tag is literally cloned as many times as there
+    are auto-generated prefix lists, with it's value replaced by the actual prefix
+    list name and autopolicy attributes 'upto' and 'update' removed.
+
+When prefixes are retrieved from Whois/RIS server, tag's value is used as regex that
+is matched against prefixes' origin ASNs. Prefixes whose origin ASNs match this regex
+are selected, others are ignored. Using regular expressions to select prefixes makes
+it possible to 
+

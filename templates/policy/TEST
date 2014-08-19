@@ -1,0 +1,68 @@
+<?xml version="1.0" standalone="yes"?> 
+<policies>
+    <policy id="POLICY-TEST">
+	<config platform="ios" action="prepend">! IOS_POLICY_PREPEND</config>
+	<config platform="junos" action="prepend"><![CDATA[<!-- JUNOS_POLICY_PREPEND -->]]></config>
+	<term action="permit" id="own-prefixes">
+	    <config platform="ios" action="prepend">! IOS_TERM_PREPEND</config>
+	    <config platform="junos" action="prepend"><![CDATA[<!-- JUNOS_TERM_PREPEND -->]]></config>
+	    <match>
+		<config platform="ios" action="prepend">! IOS_MATCH_PREPEND</config>
+		<config platform="junos" action="prepend"><![CDATA[<!-- JUNOS_MATCH_PREPEND -->]]></config>
+		<family>inet</family>
+		<protocol id="65535">bgp</protocol>
+		<as-path id="11">65535</as-path>
+		<prefix-list match="orlonger" include="yes">BOGONS</prefix-list>
+		<community>community1</community>
+		<community>community2</community>
+		<neighbor id="GW1">10.10.10.1</neighbor>
+		<neighbor id="BACKUPGW">10.10.10.2</neighbor>
+		<config platform="ios" action="append">! IOS_MATCH_APPEND</config>
+		<config platform="junos" action="append"><![CDATA[<!-- JUNOS_MATCH_APPEND -->]]></config>
+	    </match>
+	    <set>
+		<config platform="ios" action="prepend">! IOS_SET_PREPEND</config>
+		<config platform="junos" action="prepend"><![CDATA[<!-- JUNOS_SET_PREPEND -->]]></config>
+		<local-preference action="add">300</local-preference>
+		<protocol-preference action="subtract">90</protocol-preference>
+		<med>22</med>
+		<weight>66</weight>
+		<community action="delete" id="my-communities"></community>
+		<community action="add" id="peer-prefixes">65535:100</community>
+		<community action="add" id="advertise-to-customers">65535:200</community>
+		<next-hop>10.0.0.1</next-hop>
+		<origin>igp</origin>
+		<config platform="ios" action="append">! IOS_SET_APPEND</config>
+		<config platform="junos" action="append"><![CDATA[<!-- JUNOS_SET_APPEND -->]]></config>
+	    </set>
+	    <config platform="ios" action="append">! IOS_TERM_APPEND</config>
+	    <config platform="junos" action="append"><![CDATA[<!-- JUNOS_TERM_APPEND -->]]></config>
+	</term>
+	<term action="permit" id="customer-prefixes">
+	    <match>
+		<family>inet</family>
+		<protocol id="65535">bgp</protocol>
+		<as-path id="12">65535 65500 .*</as-path>
+		<as-path id="13">65535 65530 .*</as-path>
+		<prefix-list match="orlonger">CUSTOMERS</prefix-list>
+		<community>community1</community>
+		<community>community2</community>
+		<neighbor>10.10.10.1</neighbor>
+		<neighbor>10.10.10.2</neighbor>
+	    </match>
+	    <set>
+		<prepend>65535 65535 65535</prepend>
+		<local-preference>200</local-preference>
+		<med>22</med>
+		<weight>66</weight>
+		<community action="delete" id="my-communities"></community>
+		<community action="add" id="peer-prefixes">65535:100</community>
+		<community action="add" id="advertise-to-customers">65535:200</community>
+		<next-hop>10.0.0.1</next-hop>
+		<origin>igp</origin>
+	    </set>
+	</term>
+	<config platform="ios" action="append">! IOS_POLICY_APPEND</config>
+	<config platform="junos" action="append"><![CDATA[<!-- JUNOS_POLICY_APPEND -->]]></config>
+    </policy>
+</policies>

@@ -1,0 +1,139 @@
+
+What BGP Policy Genrator is ?
+=============================
+
+It generates BGP policy configuration for network OSes from various vendors
+when invoked from cli or from web, via specific URL.
+
+The most common elements of policy configurations, like prefix lists and
+BGP import filters are generated from XML-based templates defined manually,
+by users, or automatically, by fetching policy data from RIPE's database.
+
+Automatically generating policies is a two step process:
+ 1) policy and prefix list templates are auto-generated from policy data
+    (export attributes, AS-sets, route objects, ...) retrieved from RIPE
+    database. Once generated, these templates are no different from any
+    other (manually created) template.
+ 2) BGP policy configuration is generated on demand from auto-generated
+    templates.
+
+Web part of this software reads templates and generates network devices'
+configuration on the fly whether they were auto-generated or configured
+manually. It's triggered by opening specific URL like
+
+  http://<yourhostname>/<platform>/<type>
+
+where <platform> means network device's OS (ios, junos, ...) which
+determines the format of generated configuration, while <type> means
+the type of configuration we want (policies, prefix lists, ...).
+
+Network devices can invoke generator URLs and fetch output directly,
+include URLs in local automation scripts, or fetch generated config by
+some other means.
+
+Configuration can also be generated from shell, which brings us to
+the shell part of this software. Aside from generating configurations,
+autopolicies can be generated and updated from shell, too. Most likely,
+these operations would be invoked periodically, from cron.
+
+What BGP Policy Genrator isn't ?
+================================
+
+It is NOT a complete BGP configuration management solution nor is it
+a generic policy generation tool. In fact, as of this writing, it doesn't
+handle BGP config at all - only the policy parts referenced by BGP config
+and only those most likely to get changed and are good candidates to be
+generated automatically.
+
+That means it doesn't cover all possible angles of policy configuration
+and it's not ment to. It's goal is to provide easy way for multihomed
+systems to maintain their peering policies, especially import policies
+which can sometimes be difficult to maintain when peering with large
+networks.
+
+Whois/RIS
+=========
+
+Templates are auto-updated using Whois or RIS databases. Unlike Whois, RIS
+keeps live routes collected from route servers, not route objects which are
+subject to RIRs' policies and scrutiny of its' admins. Therefore, RIS doesn't
+provide authoritative information, but a real-world view of global routing.
+On the other hand, RIS servers provide 'bulk mode' (query multiple objects
+at once), which makes prefix collection considerably faster.
+
+BGP Policy Generator provides option to select the source of prefix information.
+By default, prefixes are collected from Whois server, but that can be overriden
+by setting configuration option 'use_ris' to TRUE.
+
+Installation
+============
+
+Quick way - just unpack it somewhere inside DocumentRoot and point your
+devices or scripts to
+
+  http://<hostname>/.../docroot/<platform>/<type>
+
+It should work.
+
+Proper way - unpack to some dir (say, /opt/bgp-policy-generator), create
+virtual host using /opt/bgp-policy-generator/docroot as DocumentRoot and
+configure that directory with 'AllowOverride all'. Then you can point your
+devices/scripts to
+
+  http://<hostname>/<platform>/<type>
+
+and that's it.
+
+In either case, if you wish to perform regular autopolicy updates, you need to
+schedule <installdir>/update-templates.php triggers via cron. How often is
+completely up to you. Bear in mind, though, that some peers might export
+A LOT of ASNs which results in even more announced routes, which might take
+considerable time to collect.
+
+Configuration
+=============
+
+Edit config.php. There's hardly anything you might want to change. You do,
+however, have to set 'local_as' parameter if you want to use template auto
+update.
+
+That's it.
+
+Usage
+=====
+
+Create autopolicy, policy and prefix list templates and fetch your device
+configurations. To retrieve the entire configuration via http, open
+
+  http://<hostname>/<platform>/<type>
+
+To retrieve specific configuration via http, open
+
+  http://<hostname>/<platform>/<type>/<name>
+
+To update autopolicies via http, open
+
+  http://<hostname>/template/update
+
+To update specific autopolicy via http, open
+
+  http://<hostname>/template/update/<name>
+
+To retrieve the entire configuration from shell, invoke
+
+  <installdir>/generate-configs.php <type> <platform>
+
+To retrieve specific configuration from shell, invoke
+
+  <installdir>/generate-configs.php <type> <platform> <name>
+
+To update autopolicies from shell, invoke
+
+  <installdir>/update-templates.php
+
+To update specific autopolicy from shell, invoke
+
+  <installdir>/update-templates.php <name>
+
+That's about it.
+
