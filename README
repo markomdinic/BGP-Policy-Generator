@@ -1,6 +1,6 @@
 
-What BGP Policy Genrator is ?
-=============================
+What BGP Policy Generator is ?
+==============================
 
 It generates BGP policy configuration for network OSes from various vendors
 when invoked from cli or from web, via specific URL.
@@ -36,8 +36,8 @@ the shell part of this software. Aside from generating configurations,
 autopolicies can be generated and updated from shell, too. Most likely,
 these operations would be invoked periodically, from cron.
 
-What BGP Policy Genrator isn't ?
-================================
+What BGP Policy Generator isn't ?
+=================================
 
 It is NOT a complete BGP configuration management solution nor is it
 a generic policy generation tool. In fact, as of this writing, it doesn't
