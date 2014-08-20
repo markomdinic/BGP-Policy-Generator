@@ -19,13 +19,5 @@ Supported network platforms:
 
                     load merge http://<yourhost>/junos/<type>/<name> relative
 
- 'junosxsl'     - JunOS, XSLT format
-                - You can load configuration using operation script
-                  by including generated XSLT output from it:
-
-                    <xsl:include href="http://<yourhost>/junosxsl/<type>"/>
-
-                  or
-
-                    <xsl:include href="http://<yourhost>/junosxsl/<type>/<name>"/>
-
+ 'junosxsl'     - JunOS, operation script in XSLT format
+                - You can load it and run it as an operational script

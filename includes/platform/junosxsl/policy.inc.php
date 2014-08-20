@@ -18,9 +18,16 @@
 
 */
 
+include_once $config['includes_dir'].'/platform/junosxsl/functions.inc.php';
+
+function policy_content_type()
+{
+  return "text/xml";
+}
+
 function policy_begin(&$junos_conf)
 {
-  $junos_conf[] = "<xsl:stylesheet xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\" version=\"1.0\">";
+  junosxsl_envelope('begin', $junos_conf);
 }
 
 function policy_generate($template, &$junos_conf)
@@ -34,7 +41,7 @@ function policy_generate($template, &$junos_conf)
       continue;
 
     // Begin policy statement
-    $junos_conf[] = "<policy-statement replace=\"replace\">";
+    $junos_conf[] = "<policy-statement>";
     $junos_conf[] = "<name>".$policy_name."</name>";
 
     // Look for 'config' tags that contain
@@ -378,7 +385,7 @@ function policy_generate($template, &$junos_conf)
 
 function policy_end(&$junos_conf)
 {
-  $junos_conf[] = "</xsl:stylesheet>";
+  junosxsl_envelope('end', $junos_conf);
 }
 
 ?>

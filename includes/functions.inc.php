@@ -156,7 +156,7 @@ function update_template($autotemplate)
     // Our peer's ASN
     $peer_as = 'AS'.$m[1];
 
-    if(empty($_GET))
+    if(php_sapi_name() == "cli")
       echo("Fetching prefixes announced by ".$peer_as." to ".$local_as."\n");
 
     // To which protocol family should prefixes belong ?
@@ -359,6 +359,27 @@ function find_policy_by_peer_as($peer_as)
 
 // *************************** GENERATOR FUNCTIONS ****************************
 
+function print_generated_config(&$device_conf, $config_type)
+{
+  // Serialize configuration
+  $config = implode("\n", $device_conf)."\n";
+  // Generate HTTP headers if not called from CLI
+  if(!(php_sapi_name() == 'cli')) {
+    // Get content type if generator defines it
+    $func = $config_type.'_content_type';
+    if(is_callable($func))
+      $content_type = $func();
+    // Default content type is text/plain
+    if(empty($content_type))
+      $content_type = "text/plain";
+    // Generate HTTP headers
+    header('Content-Type: '.$content_type);
+    header('Content-Length: '.strlen($config));
+  }
+  // Dump generated configuration
+  echo($config);
+}
+
 function generate_config_by_name($platform, $type, $name, &$device_conf=array())
 {
   global $config;
@@ -416,7 +437,7 @@ function generate_config_by_name($platform, $type, $name, &$device_conf=array())
   // If external config storage wasn't given ...
   if(func_num_args() < 4)
     // ... dump generated configuration
-    echo(implode("\n", $device_conf)."\n");
+    print_generated_config($device_conf, $type);
 
   // Success
   return true;
@@ -460,7 +481,7 @@ function generate_full_config($platform, $type)
   }
 
   // Dump generated configuration
-  echo(implode("\n", $device_conf)."\n");
+  print_generated_config($device_conf, $type);
 
   // Success
   return true;
