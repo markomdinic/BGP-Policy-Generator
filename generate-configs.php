@@ -20,7 +20,7 @@
 */
 
 if(count($argv) < 3 || count($argv) > 4) {
-  echo("Usage: ".basename(realpath(__FILE__))." <platform> <config_type> [config_name]\n");
+  echo("Usage: ".basename(realpath(__FILE__))." <platform> <config_type> [template_id1,template_id2,...]\n");
   exit(255);
 }
 
@@ -32,10 +32,12 @@ include $config['base_dir']."/config.php";
 // Load common code library
 include $config['includes_dir']."/functions.inc.php";
 
-if(!empty($argv[3]))
-  // Generate specific device configuration
-  generate_config_by_name($argv[1], $argv[2], $argv[3]);
-else
+if(!empty($argv[3])) {
+  $template_ids = explode(',', $argv[3]);
+  if(!empty($template_ids))
+    // Generate specific device configuration
+    generate_config_by_name($argv[1], $argv[2], $template_ids);
+} else
   // Generate complete device configuration
   generate_full_config($argv[1], $argv[2]);
 

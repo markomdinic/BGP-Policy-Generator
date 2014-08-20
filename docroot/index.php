@@ -40,10 +40,12 @@ if($_GET['platform'] == 'template' && $_GET['type'] == 'update') {
     update_all_templates();
 } else {
   // Template ID (name) specified ?
-  if(!empty($_GET['id']))
-    // Generate specific defice configuration
-    generate_config_by_name($_GET['platform'], $_GET['type'], $_GET['id']);
-  else
+  if(!empty($_GET['id'])) {
+    $template_ids = explode(',', $_GET['id']);
+    if(!empty($template_ids))
+      // Generate specific defice configuration
+      generate_config_by_name($_GET['platform'], $_GET['type'], $template_ids);
+  } else
     // Generate complete device configuration
     generate_full_config($_GET['platform'], $_GET['type']);
 }

@@ -111,6 +111,10 @@ To retrieve specific configuration via http, open
 
   http://<hostname>/<platform>/<type>/<name>
 
+To retrieve multiple specific configurations via http, open
+
+  http://<hostname>/<platform>/<type>/<name1>,<name2>,<name3>,...
+
 To update autopolicies via http, open
 
   http://<hostname>/template/update
@@ -126,6 +130,10 @@ To retrieve the entire configuration from shell, invoke
 To retrieve specific configuration from shell, invoke
 
   <installdir>/generate-configs.php <type> <platform> <name>
+
+To retrieve multiple specific configurations from shell, invoke
+
+  <installdir>/generate-configs.php <type> <platform> <name1>,<name2>,<name3>,...
 
 To update autopolicies from shell, invoke
 
