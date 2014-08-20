@@ -130,15 +130,14 @@ Match conditions are defined by the following tags:
                      'id' - Router process ID. Not used on all platforms.
 
  <as-path>      - Matches the as-path of a route.
-                - Tag's value specifies as-path regular expression, used on
-                  some platforms while others use indirect approach - ACLs.
+                - Tag's value specifies as-path regular expression name
+                  used on some platforms while others use numeric ACL IDs.
                 - Takes 1 mandatory attribute:
 
                      'id' - Unique identifier of the as-path access list
-                            when used on platforms that use ACLs instead of
-                            as-path regular expressions embedded in polcy.
-                            It can be a name or a numeric identifier,
-                            depending on the target platform.
+                            when used on platforms that use numeric ACL
+                            IDs instead of as-path regular expression
+                            names.
 
  <community>    - Matches a set of communities routes are tagged with.
                 - Tag's value specifies the name of a community list.

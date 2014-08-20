@@ -18,6 +18,11 @@
 
 */
 
+function prefixlist_begin(&$junos_conf)
+{
+  $junos_conf[] = "<xsl:stylesheet xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\" version=\"1.0\">";
+}
+
 function prefixlist_generate($template, &$junos_conf)
 {
   foreach($template->getElementsByTagName('prefix-list') as $prefix_list) {
@@ -43,7 +48,7 @@ function prefixlist_generate($template, &$junos_conf)
 
     // Look for 'config' tag that contains
     // free-form, platform-specific config
-    $ff = get_freeform_config($prefix_list, 'junos', 'prepend');
+    $ff = get_freeform_config($prefix_list, 'junosxsl', 'prepend');
     if(!empty($ff))
       $conf[] = $ff;
 
@@ -57,12 +62,14 @@ function prefixlist_generate($template, &$junos_conf)
          ($family == 6 && !is_ipv6($prefix)))
         continue;
       // Build prefix list items in temporary storage
-      $conf[] = $prefix.";";
+      $conf[] = "<prefix-list-item replace=\"replace\">";
+      $conf[] = "<name>".$prefix."</name>";
+      $conf[] = "</prefix-list-item>";
     }
 
     // Look for 'config' tag that contains
     // free-form, platform-specific config
-    $ff = get_freeform_config($prefix_list, 'junos', 'append');
+    $ff = get_freeform_config($prefix_list, 'junosxsl', 'append');
     if(!empty($ff))
       $conf[] = $ff;
 
@@ -71,14 +78,20 @@ function prefixlist_generate($template, &$junos_conf)
     // case no prefix list items were generated (possibly
     // due to misconfiguration).
     if(count($conf)) {
-      $junos_conf[] = "prefix-list ".$name." {";
+      $junos_conf[] = "<prefix-list>";
+      $junos_conf[] = "<name>".$name."</name>";
       foreach($conf as $line)
-        $junos_conf[] = "    ".$line;
-      $junos_conf[] = "}";
+        $junos_conf[] = $line;
+      $junos_conf[] = "</prefix-list>";
     }
   }
 
   return true;
+}
+
+function prefixlist_end(&$junos_conf)
+{
+  $junos_conf[] = "</xsl:stylesheet>";
 }
 
 ?>

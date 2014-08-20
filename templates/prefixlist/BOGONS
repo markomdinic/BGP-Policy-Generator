@@ -3,6 +3,6 @@
     <prefix-list id="BOGONS" family="inet" origin="65535">
 	<item upto="24">10.0.0.0/8</item>
 	<item upto="24">172.16.0.0/12</item>
-	<item upto="24">192.168.0.0/8</item>
+	<item upto="24">192.168.0.0/16</item>
     </prefix-list>
 </prefix-lists>

@@ -377,6 +377,20 @@ function generate_config_by_name($platform, $type, $name, &$device_conf=array())
   // Include generator code
   include_once $include_file;
 
+  // Device-specific begin/end generators
+  // should be called if we are starting
+  // with an empty configuration
+  $envelope = empty($device_conf) ? true:false;
+
+  // Code to execute before generator,
+  // possibly to prepare config header,
+  // but only if we are starting fresh
+  if($envelope) {
+    $begin = $type.'_begin';
+    if(is_callable($begin))
+      $begin($device_conf);
+  }
+
   // This is the selection of elements
   // to be used for config generation
   $elements = is_array($element) ? $element:array($element);
@@ -386,8 +400,17 @@ function generate_config_by_name($platform, $type, $name, &$device_conf=array())
   foreach($elements as $element) {
     // Invoke type-specific generator
     if($generate($element, $device_conf) === FALSE)
-      // Generators return explicit FALSE on error
+      // Generators return explicit FALSE on error,
       return false;
+  }
+
+  // Code to execute after generator,
+  // possibly to create config footer,
+  // but only if we started fresh
+  if($envelope) {
+    $end = $type.'_end';
+    if(is_callable($end))
+      $end($device_conf);
   }
 
   // If external config storage wasn't given ...
@@ -418,12 +441,22 @@ function generate_full_config($platform, $type)
   // Process all template files
   // with generate() function
   foreach(load_templates($config['templates_dir'].'/'.$type) as $filename => $template) {
+    // Code to execute before generator,
+    // possibly to prepare config header
+    $begin = $type.'_begin';
+    if(is_callable($begin))
+      $begin($device_conf);
     // Generate configuration from the template
     $generate = $type.'_generate';
     // Invoke type-specific generator
     if($generate($template, $device_conf) === FALSE)
       // Generators return explicit FALSE on error
       return false;
+    // Code to execute after generator,
+    // possibly to create config footer
+    $end = $type.'_end';
+    if(is_callable($end))
+      $end($device_conf);
   }
 
   // Dump generated configuration

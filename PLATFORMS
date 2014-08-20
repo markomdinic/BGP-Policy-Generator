@@ -1,0 +1,31 @@
+
+Supported network platforms:
+
+ 'ios'          - Cisco IOS
+                - You can load configuration using something like
+
+                    copy http://<yourhost>/ios/<type> run
+
+                  or
+
+                    copy http://<yourhost>/ios/<type>/<name> run
+
+ 'junos'        - JunOS, load merge format
+                - You can load configuration using something like
+
+                    load merge http://<yourhost>/junos/<type> relative
+
+                  or
+
+                    load merge http://<yourhost>/junos/<type>/<name> relative
+
+ 'junosxsl'     - JunOS, XSLT format
+                - You can load configuration using operation script
+                  by including generated XSLT output from it:
+
+                    <xsl:include href="http://<yourhost>/junosxsl/<type>"/>
+
+                  or
+
+                    <xsl:include href="http://<yourhost>/junosxsl/<type>/<name>"/>
+
