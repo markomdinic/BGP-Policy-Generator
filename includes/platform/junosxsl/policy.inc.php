@@ -30,10 +30,8 @@ function policy_begin(&$junos_conf)
   return junosxsl_begin($junos_conf);
 }
 
-function policy_generate($template, &$junos_conf)
+function policy_generate($template, &$junos_conf, &$include)
 {
-  $include_prefix_lists = array();
-
   foreach($template->getElementsByTagName('policy') as $policy) {
     // Policy name is mandatory
     $policy_name = $policy->getAttribute('id');
@@ -149,7 +147,8 @@ function policy_generate($template, &$junos_conf)
             case 'yes':
             case 'on':
             case '1':
-              $include_prefix_lists[] = $prefix_list_name;
+              // Add prefix list name to the inclusion list
+              include_config($include, 'prefixlist', $prefix_list_name);
               break;
           }
         }
@@ -375,10 +374,6 @@ function policy_generate($template, &$junos_conf)
     // End policy statement
     $junos_conf[] = "</policy-statement>";
   }
-
-  if(count($include_prefix_lists) > 0)
-    // Include prefix-list definition if requested
-    generate_config_by_name('junosxsl', 'prefixlist', $include_prefix_lists, $junos_conf);
 
   return true;
 }

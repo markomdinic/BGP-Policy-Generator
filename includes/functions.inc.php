@@ -359,6 +359,12 @@ function find_policy_by_peer_as($peer_as)
 
 // *************************** GENERATOR FUNCTIONS ****************************
 
+function include_config(&$include, $type, $name)
+{
+//  $include[$type][$name] = true;
+  $include[$type][] = $name;
+}
+
 function print_generated_config(&$device_conf, $config_type)
 {
   // Serialize configuration
@@ -367,6 +373,9 @@ function print_generated_config(&$device_conf, $config_type)
   $func = $config_type.'_content_type';
   if(is_callable($func))
     $content_type = $func();
+  // Default content type is text/plain
+  if(empty($content_type))
+    $content_type = "text/plain";
   // Detect content type and reformat, if possible
   switch($content_type) {
     case 'text/xml':
@@ -381,10 +390,6 @@ function print_generated_config(&$device_conf, $config_type)
       $doc->formatOutput = true;
       // Put it back nicely formatted
       $config = $doc->saveXML();
-      break;
-    default:
-      // Default content type is text/plain
-      $content_type = "text/plain";
       break;
   }
   // Generate HTTP headers if not called from CLI
@@ -428,6 +433,10 @@ function generate_config_by_name($platform, $type, $name, &$device_conf=array())
       $begin($device_conf);
   }
 
+  // This array will contain
+  // configuration to include
+  $include = array();
+
   // This is the selection of elements
   // to be used for config generation
   $elements = is_array($element) ? $element:array($element);
@@ -436,10 +445,21 @@ function generate_config_by_name($platform, $type, $name, &$device_conf=array())
   // Generate configuration for selected element(s)
   foreach($elements as $element) {
     // Invoke type-specific generator
-    if($generate($element, $device_conf) === FALSE)
+    if($generate($element, $device_conf, $include) === FALSE)
       // Generators return explicit FALSE on error,
       return false;
   }
+
+  // Additional config requested by processed templates,
+  // if generator used for processing supports it.
+  //
+  // WARNING! This can lead to inclusion loops if generators
+  // allow mutual inclusion of config types. This should NEVER
+  // happen. Inclusion should always be allowed in one-way only.
+  // More complex structures include less complex ones, NEVER
+  // the other way around. Developers, you have been warned!
+  if(generate_included_config($platform, $device_conf, $include) === FALSE)
+    return false;
 
   // Code to execute after generator,
   // possibly to create config footer,
@@ -454,6 +474,24 @@ function generate_config_by_name($platform, $type, $name, &$device_conf=array())
   if(func_num_args() < 4)
     // ... dump generated configuration
     print_generated_config($device_conf, $type);
+
+  // Success
+  return true;
+}
+
+function generate_included_config($platform, &$device_conf, &$include)
+{
+  foreach($include as $type => $names) {
+    if(!is_array($names))
+      continue;
+    // Weed out duplicates
+    $names = array_unique($names);
+    if(count($names) < 1)
+      continue;
+    // Generate configs from the list
+    if(generate_config_by_name($platform, $type, $names, $device_conf) === FALSE)
+      return false;
+  }
 
   // Success
   return true;
@@ -474,6 +512,9 @@ function generate_full_config($platform, $type)
   // This array will contain
   // generated configuration
   $device_conf = array();
+  // This array will contain
+  // configuration to include
+  $include = array();
 
   // Code to execute before generator,
   // possibly to prepare config header
@@ -487,10 +528,21 @@ function generate_full_config($platform, $type)
     // Generate configuration from the template
     $generate = $type.'_generate';
     // Invoke type-specific generator
-    if($generate($template, $device_conf) === FALSE)
+    if($generate($template, $device_conf, $include) === FALSE)
       // Generators return explicit FALSE on error
       return false;
   }
+
+  // Additional config requested by processed templates,
+  // if generator used for processing supports it.
+  //
+  // WARNING! This can lead to inclusion loops if generators
+  // allow mutual inclusion of config types. This should NEVER
+  // happen. Inclusion should always be allowed in one-way only.
+  // More complex structures include less complex ones, NEVER
+  // the other way around. Developers, you have been warned!
+  if(generate_included_config($platform, $device_conf, $include) === FALSE)
+    return false;
 
   // Code to execute after generator,
   // possibly to create config footer
@@ -535,5 +587,6 @@ function get_freeform_config($template, $platform, $action)
   if(count($conf))
     return implode("\n", $conf);
 }
+
 
 ?>
