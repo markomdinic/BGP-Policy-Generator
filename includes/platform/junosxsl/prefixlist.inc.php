@@ -18,16 +18,16 @@
 
 */
 
-include_once $config['includes_dir'].'/platform/junosxsl/functions.inc.php';
+include_once $config['includes_dir'].'/platform/junosxsl/common.inc.php';
 
 function prefixlist_content_type()
 {
-  return "text/xml";
+  return junosxsl_content_type();
 }
 
 function prefixlist_begin(&$junos_conf)
 {
-  junosxsl_envelope('begin', $junos_conf);
+  return junosxsl_begin($junos_conf);
 }
 
 function prefixlist_generate($template, &$junos_conf)
@@ -98,7 +98,7 @@ function prefixlist_generate($template, &$junos_conf)
 
 function prefixlist_end(&$junos_conf)
 {
-  junosxsl_envelope('end', $junos_conf);
+  return junosxsl_end($junos_conf);
 }
 
 ?>

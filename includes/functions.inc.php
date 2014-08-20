@@ -363,16 +363,32 @@ function print_generated_config(&$device_conf, $config_type)
 {
   // Serialize configuration
   $config = implode("\n", $device_conf)."\n";
+  // Get content type if generator defines it
+  $func = $config_type.'_content_type';
+  if(is_callable($func))
+    $content_type = $func();
+  // Detect content type and reformat, if possible
+  switch($content_type) {
+    case 'text/xml':
+    case 'text/xsl':
+    case 'text/xslt':
+      $doc = new DomDocument;
+      $doc->preserveWhiteSpace = false;
+      $doc->validateOnParse = true;
+      // Load XML as is
+      $doc->loadXML($config);
+      // Make it pretty
+      $doc->formatOutput = true;
+      // Put it back nicely formatted
+      $config = $doc->saveXML();
+      break;
+    default:
+      // Default content type is text/plain
+      $content_type = "text/plain";
+      break;
+  }
   // Generate HTTP headers if not called from CLI
   if(!(php_sapi_name() == 'cli')) {
-    // Get content type if generator defines it
-    $func = $config_type.'_content_type';
-    if(is_callable($func))
-      $content_type = $func();
-    // Default content type is text/plain
-    if(empty($content_type))
-      $content_type = "text/plain";
-    // Generate HTTP headers
     header('Content-Type: '.$content_type);
     header('Content-Length: '.strlen($config));
   }
@@ -401,12 +417,12 @@ function generate_config_by_name($platform, $type, $name, &$device_conf=array())
   // Device-specific begin/end generators
   // should be called if we are starting
   // with an empty configuration
-  $envelope = empty($device_conf) ? true:false;
+  $fresh = empty($device_conf) ? true:false;
 
   // Code to execute before generator,
   // possibly to prepare config header,
   // but only if we are starting fresh
-  if($envelope) {
+  if($fresh) {
     $begin = $type.'_begin';
     if(is_callable($begin))
       $begin($device_conf);
@@ -428,7 +444,7 @@ function generate_config_by_name($platform, $type, $name, &$device_conf=array())
   // Code to execute after generator,
   // possibly to create config footer,
   // but only if we started fresh
-  if($envelope) {
+  if($fresh) {
     $end = $type.'_end';
     if(is_callable($end))
       $end($device_conf);
@@ -459,26 +475,28 @@ function generate_full_config($platform, $type)
   // generated configuration
   $device_conf = array();
 
+  // Code to execute before generator,
+  // possibly to prepare config header
+  $begin = $type.'_begin';
+  if(is_callable($begin))
+    $begin($device_conf);
+
   // Process all template files
   // with generate() function
   foreach(load_templates($config['templates_dir'].'/'.$type) as $filename => $template) {
-    // Code to execute before generator,
-    // possibly to prepare config header
-    $begin = $type.'_begin';
-    if(is_callable($begin))
-      $begin($device_conf);
     // Generate configuration from the template
     $generate = $type.'_generate';
     // Invoke type-specific generator
     if($generate($template, $device_conf) === FALSE)
       // Generators return explicit FALSE on error
       return false;
-    // Code to execute after generator,
-    // possibly to create config footer
-    $end = $type.'_end';
-    if(is_callable($end))
-      $end($device_conf);
   }
+
+  // Code to execute after generator,
+  // possibly to create config footer
+  $end = $type.'_end';
+  if(is_callable($end))
+    $end($device_conf);
 
   // Dump generated configuration
   print_generated_config($device_conf, $type);
