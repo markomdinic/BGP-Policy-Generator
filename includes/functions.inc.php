@@ -167,9 +167,6 @@ function update_template($autotemplate)
     // Our peer's ASN
     $peer_as = 'AS'.$m[1];
 
-    if(php_sapi_name() != "cli")
-      header('Content-Type: ', 'text/plain');
-
     echo("Fetching prefixes announced by ".$peer_as." to ".$local_as." ...\n");
 
     // To which protocol family should prefixes belong ?
@@ -314,6 +311,9 @@ function update_template_by_id($id)
   if(empty($id))
     return false;
 
+  if(php_sapi_name() != "cli")
+    header('Content-Type: ', 'text/plain');
+
   // Make sure this is always array
   $ids = is_array($id) ? $id:array($id);
 
@@ -347,6 +347,9 @@ function update_template_by_id($id)
 function update_all_templates()
 {
   global $config;
+
+  if(php_sapi_name() != "cli")
+    header('Content-Type: ', 'text/plain');
 
   // Load all autopolicy templates
   $autotemplates = load_templates($config['templates_dir'].'/autopolicy');
