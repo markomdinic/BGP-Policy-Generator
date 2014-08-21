@@ -69,7 +69,7 @@ function prefixlist_generate($template, &$junos_conf)
          ($family == 6 && !is_ipv6($prefix)))
         continue;
       // Build prefix list items in temporary storage
-      $conf[] = "<prefix-list-item replace=\"replace\">";
+      $conf[] = "<prefix-list-item>";
       $conf[] = "<name>".$prefix."</name>";
       $conf[] = "</prefix-list-item>";
     }

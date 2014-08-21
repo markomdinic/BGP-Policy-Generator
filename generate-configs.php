@@ -36,7 +36,7 @@ if(!empty($argv[3])) {
   $template_ids = explode(',', $argv[3]);
   if(!empty($template_ids))
     // Generate specific device configuration
-    generate_config_by_name($argv[1], $argv[2], $template_ids);
+    generate_config_by_id($argv[1], $argv[2], $template_ids);
 } else
   // Generate complete device configuration
   generate_full_config($argv[1], $argv[2]);

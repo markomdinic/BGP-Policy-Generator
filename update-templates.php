@@ -32,10 +32,12 @@ include $config['base_dir']."/config.php";
 // Load common code library
 include $config['includes_dir']."/functions.inc.php";
 
-if(!empty($argv[1]))
-  // Update specific autopolicy from RIPE
-  update_template_by_name($argv[1]);
-else
+if(!empty($argv[1])) {
+  $template_ids = explode(',', $argv[1]);
+  if(!empty($template_ids))
+    // Update specific autopolicy from RIPE
+    update_template_by_id($template_ids);
+} else
   // Update all autopolicies from RIPE
   update_all_templates();
 

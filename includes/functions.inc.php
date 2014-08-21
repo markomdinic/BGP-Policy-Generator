@@ -25,6 +25,7 @@ include_once $config['includes_dir'].'/whois.inc.php';
 
 function load_template($filename)
 {
+  // Input params sanity check
   if(empty($filename) || !is_file($filename))
     return;
 
@@ -39,7 +40,7 @@ function load_template($filename)
 function load_templates($dirname)
 {
   // Parameters must be sane
-  if(!is_dir($dirname))
+  if(empty($dirname) || !is_dir($dirname))
     return false;
 
   // Prepare for directory enumeration
@@ -70,6 +71,10 @@ function load_templates($dirname)
 function find_template_by_value($type, $tag, $value)
 {
   global $config;
+
+  // Don't waste my time
+  if(empty($type) || empty($tag) || empty($value))
+    return;
 
   $values = is_array($value) ? $value:array($value);
   $results = array();
@@ -102,6 +107,11 @@ function find_template_by_value($type, $tag, $value)
 function find_template_by_attr($type, $tag, $attr, $attrval)
 {
   global $config;
+
+  // Don't waste my time
+  if(empty($type) || empty($tag) || 
+     empty($attr) || empty($attrval))
+    return;
 
   $attrvals = is_array($attrval) ? $attrval:array($attrval);
   $results = array();
@@ -139,10 +149,11 @@ function update_template($autotemplate)
   if(empty($autotemplate) || empty($config['local_as']))
     return false;
 
+  // Extract our ASN
   if(!preg_match('/^(?:AS)?(\d+)$/i', $config['local_as'], $m))
     return false;
 
-  // Our own ASN
+  // Make sure it is always in AS<n> format
   $local_as = 'AS'.$m[1];
 
   // Process all policies in this autopolicy template
@@ -156,8 +167,10 @@ function update_template($autotemplate)
     // Our peer's ASN
     $peer_as = 'AS'.$m[1];
 
-    if(php_sapi_name() == "cli")
-      echo("Fetching prefixes announced by ".$peer_as." to ".$local_as."\n");
+    if(php_sapi_name() != "cli")
+      header('Content-Type: ', 'text/plain');
+
+    echo("Fetching prefixes announced by ".$peer_as." to ".$local_as." ...\n");
 
     // To which protocol family should prefixes belong ?
     $family = $policy->getAttribute('family');
@@ -177,11 +190,11 @@ function update_template($autotemplate)
     // No point going any further
     // if prefixes are missing
     if(empty($announced)) {
-      echo("Got no prefixes from ".$peer_as."\n");
+      echo("Got no prefixes from ".$peer_as.".\n");
       return false;
     }
 
-    echo($peer_as." announcing ".count(array_keys($announced))." autonomous systems\n");
+    echo($peer_as." is announcing ".count(array_keys($announced))." autonomous systems.\n");
 
     // Process all policy terms within current policy
     foreach($policy->getElementsByTagName('term') as $term) {
@@ -254,8 +267,11 @@ function update_template($autotemplate)
 
                 // Write template to a file
                 $fd = fopen($config['templates_dir'].'/prefixlist/'.$prefix_list_name, 'w+');
-                if(!isset($fd))
-                  continue 3;
+                if(!isset($fd) || !is_resource($fd)) {
+                  // Abort at the first sign of trouble
+                  echo("Aborting: failed to write prefix list file ".$prefix_list_name.".\n");
+                  return false;
+                }
                 fwrite($fd, implode("\n", $prefix_list)."\n");
                 fclose($fd);
 
@@ -290,24 +306,42 @@ function update_template($autotemplate)
   return true;
 }
 
-function update_template_by_name($name)
+function update_template_by_id($id)
 {
   global $config;
 
-  // Load specific autopolicy template
-  $autotemplate = load_template($config['templates_dir'].'/autopolicy/'.$name);
-  if(!isset($autotemplate)) {
-    echo("Auto-policy template ".$name." not found\n");
+  // Don't waste my time
+  if(empty($id))
     return false;
+
+  // Make sure this is always array
+  $ids = is_array($id) ? $id:array($id);
+
+  foreach($ids as $id) {
+
+    echo("Updating autopolicy template ".$id." ...\n");
+
+    // Load specific autopolicy template
+    $autotemplate = load_template($config['templates_dir'].'/autopolicy/'.$id);
+    if(!isset($autotemplate)) {
+      echo("Auto-policy template ".$id." not found.\n");
+      return false;
+    }
+
+    // Generate config templates from autopolicy template
+    if(update_template($autotemplate) === FALSE)
+      // Generators return explicit FALSE on error
+      return false;
+    $autotemplate->formatOutput = true;
+    // Save generated template in the policy directory
+    $autotemplate->save($config['templates_dir'].'/policy/'.$id);
+
+    echo("Autopolicy template ".$id." successfully updated.\n");
   }
 
-  // Generate config templates from autopolicy template
-  if(update_template($autotemplate) === FALSE)
-    // Generators return explicit FALSE on error
-    return false;
-  $autotemplate->formatOutput = true;
-  // Save generated template in the policy directory
-  $autotemplate->save($config['templates_dir'].'/policy/'.$name);
+  echo("Done.\n");
+
+  return true;
 }
 
 function update_all_templates()
@@ -317,9 +351,11 @@ function update_all_templates()
   // Load all autopolicy templates
   $autotemplates = load_templates($config['templates_dir'].'/autopolicy');
   if(empty($autotemplates)) {
-    echo("No auto-policy templates defined\n");
+    echo("No auto-policy templates defined.\n");
     return false;
   }
+
+  echo("Updating all autopolicy templates ...\n");
 
   // Process all autopolicy template files
   foreach($autotemplates as $filename => $autotemplate) {
@@ -331,13 +367,17 @@ function update_all_templates()
     // Save generated template in the policy directory
     $autotemplate->save($config['templates_dir'].'/policy/'.$filename);
   }
+
+  echo("Done.\n");
+
+  return true;
 }
 
 // ************************** PREFIX-LIST FUNCTIONS ***************************
 
-function find_prefixlist_by_id($name)
+function find_prefixlist_by_id($id)
 {
-  return find_template_by_attr('prefixlist', 'prefix-list', 'id', $name);
+  return find_template_by_attr('prefixlist', 'prefix-list', 'id', $id);
 }
 
 function find_prefixlist_by_origin($origin)
@@ -347,9 +387,9 @@ function find_prefixlist_by_origin($origin)
 
 // ***************************** POLICY FUNCTIONS *****************************
 
-function find_policy_by_id($name)
+function find_policy_by_id($id)
 {
-  return find_template_by_attr('policy', 'policy', 'id', $name);
+  return find_template_by_attr('policy', 'policy', 'id', $id);
 }
 
 function find_policy_by_peer_as($peer_as)
@@ -359,14 +399,20 @@ function find_policy_by_peer_as($peer_as)
 
 // *************************** GENERATOR FUNCTIONS ****************************
 
-function include_config(&$include, $type, $name)
+function include_config(&$include, $type, $id)
 {
-//  $include[$type][$name] = true;
-  $include[$type][] = $name;
+  if(!isset($include) || empty($type) || empty($id))
+    return;
+
+  $include[$type][] = $id;
 }
 
 function print_generated_config(&$device_conf, $config_type)
 {
+  // Nothing to do ?
+  if(empty($device_conf) || empty($config_type))
+    return;
+
   // Serialize configuration
   $config = implode("\n", $device_conf)."\n";
   // Get content type if generator defines it
@@ -401,19 +447,24 @@ function print_generated_config(&$device_conf, $config_type)
   echo($config);
 }
 
-function generate_config_by_name($platform, $type, $name, &$device_conf=array())
+function generate_config_by_id($platform, $type, $ids, &$device_conf=array())
 {
   global $config;
 
-  // Find the requested template by name
-  $find_by_name = 'find_'.$type.'_by_id';
-  $element = $find_by_name($name);
-  if(!isset($element))
+  // Need these parameters
+  if(empty($platform) || empty($type) ||
+     empty($ids) || !isset($device_conf))
     return false;
 
   // Format path to generator code
   $include_file = $config['includes_dir'].'/platform/'.$platform.'/'.$type.'.inc.php';
   if(!is_file($include_file))
+    return false;
+
+  // Find the requested template by id
+  $find_by_id = 'find_'.$type.'_by_id';
+  $element = $find_by_id($ids);
+  if(!isset($element))
     return false;
 
   // Include generator code
@@ -481,15 +532,19 @@ function generate_config_by_name($platform, $type, $name, &$device_conf=array())
 
 function generate_included_config($platform, &$device_conf, &$include)
 {
-  foreach($include as $type => $names) {
-    if(!is_array($names))
+  // Nothing to do without input data
+  if(empty($platform) || !isset($device_conf) || !isset($include))
+    return false;
+
+  foreach($include as $type => $ids) {
+    if(!is_array($ids))
       continue;
     // Weed out duplicates
-    $names = array_unique($names);
-    if(count($names) < 1)
+    $ids = array_unique($ids);
+    if(count($ids) < 1)
       continue;
     // Generate configs from the list
-    if(generate_config_by_name($platform, $type, $names, $device_conf) === FALSE)
+    if(generate_config_by_id($platform, $type, $ids, $device_conf) === FALSE)
       return false;
   }
 
@@ -500,6 +555,10 @@ function generate_included_config($platform, &$device_conf, &$include)
 function generate_full_config($platform, $type)
 {
   global $config;
+
+  // Nothing to do without params
+  if(empty($platform) || empty($type))
+    return false;
 
   // Format path to generator code
   $include_file = $config['includes_dir'].'/platform/'.$platform.'/'.$type.'.inc.php';
@@ -561,6 +620,9 @@ function generate_full_config($platform, $type)
 
 function get_freeform_config($template, $platform, $action)
 {
+  if(empty($template) || empty($platform) || empty($action))
+    return;
+
   $conf = array();
 
   // Find 'config' tags within current hierarchy
@@ -587,6 +649,5 @@ function get_freeform_config($template, $platform, $action)
   if(count($conf))
     return implode("\n", $conf);
 }
-
 
 ?>

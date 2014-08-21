@@ -18,8 +18,11 @@
 
 */
 
+// Supress error messages
+error_reporting(~E_ALL);
+
 // Bail out without parameters
-if(!is_array($_GET) || empty($_GET['platform']) || empty($_GET['type']))
+if(empty($_GET) || empty($_GET['platform']) || empty($_GET['type']))
   exit(0);
 
 // This will hold our own configuration
@@ -32,10 +35,12 @@ include $config['includes_dir']."/functions.inc.php";
 
 if($_GET['platform'] == 'template' && $_GET['type'] == 'update') {
   // Autotemplate ID (name) specified ?
-  if(!empty($_GET['id']))
-    // Update specific autopolicy from RIPE
-    update_template_by_name($_GET['id']);
-  else
+  if(!empty($_GET['id'])) {
+    $template_ids = explode(',', $_GET['id']);
+    if(!empty($template_ids))
+      // Update specific autopolicy from RIPE
+      update_template_by_id($template_ids);
+  } else
     // Update all autopolicies from RIPE
     update_all_templates();
 } else {
@@ -44,7 +49,7 @@ if($_GET['platform'] == 'template' && $_GET['type'] == 'update') {
     $template_ids = explode(',', $_GET['id']);
     if(!empty($template_ids))
       // Generate specific defice configuration
-      generate_config_by_name($_GET['platform'], $_GET['type'], $template_ids);
+      generate_config_by_id($_GET['platform'], $_GET['type'], $template_ids);
   } else
     // Generate complete device configuration
     generate_full_config($_GET['platform'], $_GET['type']);

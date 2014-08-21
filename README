@@ -123,6 +123,10 @@ To update specific autopolicy via http, open
 
   http://<hostname>/template/update/<name>
 
+To update multiple specific autopolicies via http, open
+
+  http://<hostname>/template/update/<name1>,<name2>,<name3>,...
+
 To retrieve the entire configuration from shell, invoke
 
   <installdir>/generate-configs.php <type> <platform>
@@ -142,6 +146,10 @@ To update autopolicies from shell, invoke
 To update specific autopolicy from shell, invoke
 
   <installdir>/update-templates.php <name>
+
+To update multiple specific autopolicies from shell, invoke
+
+  <installdir>/update-templates.php <name1>,<name2>,<name3>,...
 
 That's about it.
 
