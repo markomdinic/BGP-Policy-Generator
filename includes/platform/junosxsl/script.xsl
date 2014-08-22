@@ -6,126 +6,212 @@
     xmlns:jcs="http://xml.juniper.net/junos/commit-scripts/1.0">
     <xsl:import href="../import/junos.xsl"/>
 
+    <xsl:variable name="arguments">
+	<argument>
+	    <name>refresh</name>
+	    <description>Retrieve latest BGP policy configuration</description>
+	</argument>
+	<argument>
+	    <name>commit</name>
+	    <description>Commit last retrieved BGP policy configuration</description>
+	</argument>
+    </xsl:variable>
+
+    <xsl:param name="refresh"/>
+    <xsl:param name="commit"/>
+
     <!-- main() -->
 
     <xsl:template match="/">
 	<op-script-results>
-	    <xsl:call-template name="update-policy"/>
+	    <xsl:choose>
+		<xsl:when test="$refresh">
+		    <xsl:call-template name="refresh-policy"/>
+		</xsl:when>
+		<xsl:when test="$commit">
+		    <xsl:call-template name="commit-policy"/>
+		</xsl:when>
+		<xsl:otherwise>
+		    <xnm:error>
+			<message>
+			    <xsl:text>Unknown argument</xsl:text>
+			</message>
+		    </xnm:error>
+		</xsl:otherwise>
+	    </xsl:choose>
 	</op-script-results>
     </xsl:template>
 
-    <xsl:template name="update-policy">
-
+    <!--
+         This template is used when script is invoked with 'refresh'
+         argument to refresh the script itself from its source, thus
+         refreshing BGP policies contained in template 'commit-policy',
+         which is used on the next run, when script is invoked with
+         argument 'commit'.
+    -->
+    <xsl:template name="refresh-policy">
 	<!-- Lock the configuration -->
-
 	<xsl:variable name="lock-result">
 	    <xsl:call-template name="lock-config"/>
 	</xsl:variable>
-
 	<xsl:choose>
-
 	    <xsl:when test="$lock-result='true'">
-
 		<!-- Do the syntax sanity check before changing it -->
-
 		<xsl:variable name="check-result">
 		    <xsl:call-template name="check-config"/>
 		</xsl:variable>
-
 		<xsl:choose>
-
+		    <!-- If config syntax checks out, proceed -->
 		    <xsl:when test="$check-result='true'">
-
-			<!-- Make configuration changes -->
-
-			<xsl:variable name="policy">
+			<!-- Refresh BGP policies by refreshing self -->
+			<xsl:variable name="refresh">
 			    <load-configuration action="replace">
 				<configuration>
-				    <policy-options>
-					<!-- POLICY_PLACEHOLDER -->
-				    </policy-options>
+				    <system>
+					<scripts>
+					    <op>
+						<file>
+						    <name>bgp-policy.xsl</name>
+						    <refresh/>
+						</file>
+					    </op>
+					</scripts>
+				    </system>
 				</configuration>
 			    </load-configuration>
 			</xsl:variable>
-			<xsl:variable name="policy-out" select="jcs:invoke($policy)"/>
-
-			<!-- Do the configuration check & commit only if all the changes went well -->
-
+			<xsl:variable name="refresh-out" select="jcs:invoke($refresh)"/>
+			<!-- If all went well, check configuration and commit -->
 			<xsl:choose>
-
-			    <!-- If configuration merge went south, return error message -->
-
-			    <xsl:when test="$policy-out//xnm:error">
-				<xsl:copy-of select="$policy-out//xnm:error"/>
+			    <!-- If something went wrong, return error message -->
+			    <xsl:when test="$refresh-out//xnm:error">
+				<xsl:copy-of select="$refresh-out//xnm:error"/>
 			    </xsl:when>
-
-			    <!-- If everything went well, re-check and commit -->
-
 			    <xsl:otherwise>
-
-				<!-- Check the configuration again and commit if it checks out -->
-				 
+				<!-- If everything went well, check and commit -->
 				<xsl:variable name="commit-result">
 				    <xsl:call-template name="commit-config"/>
 				</xsl:variable>
-
 				<xsl:choose>
-
 				    <!-- Configuration commited successfully -->
-
 				    <xsl:when test="$commit-result='true'">
 					<output>
-					    <xsl:text>Configuration commited successfully</xsl:text>
+					    <xsl:text>BGP policies refreshed successfully</xsl:text>
 					</output>
 				    </xsl:when>
-
-				    <!-- Configuration commit failed - return error message -->
-
+				    <!-- Commit failed - return error message -->
 				    <xsl:otherwise>
 					<xsl:copy-of select="$commit-result"/>
 				    </xsl:otherwise>
-
 				</xsl:choose>
-
 			    </xsl:otherwise>
-
 			</xsl:choose>
-
 		    </xsl:when>
-
-		    <!-- If configuration syntax check failed, return error message -->
-
+		    <!-- If config syntax pre-check failed, return error message -->
 		    <xsl:otherwise>
 			<xsl:copy-of select="$check-result"/>
 		    </xsl:otherwise>
-
 		</xsl:choose>
-
 		<!-- Release configuration lock if it has been locked -->
-		
 		<xsl:variable name="unlock-result">
 		    <xsl:call-template name="unlock-config"/>
 		</xsl:variable>
-
 		<!-- If configuration unlock failed, return error message -->
-
 		<xsl:choose>
 		    <xsl:when test="$unlock-result='true'"/>
 		    <xsl:otherwise>
 			<xsl:copy-of select="$unlock-result"/>
 		    </xsl:otherwise>
 		</xsl:choose>
-
 	    </xsl:when>
-	
 	    <!-- If configuration lock failed, return error message -->
-	
 	    <xsl:otherwise>
 		<xsl:copy-of select="$lock-result"/>
 	    </xsl:otherwise>
-
 	</xsl:choose>
+    </xsl:template>
 
+    <!--
+         This template applies the entire BGP policy configuration
+         generated by the BGP Policy Generator. Policy configuration
+         gets refreshed when script is invoked with argument 'refresh'
+         to fetch the fresh copy of itself from the source (which
+         should be the BGP Policy Generator). It gets applied when
+         script is invoked with argument 'commit'
+    -->
+    <xsl:template name="commit-policy">
+	<!-- Lock the configuration -->
+	<xsl:variable name="lock-result">
+	    <xsl:call-template name="lock-config"/>
+	</xsl:variable>
+	<xsl:choose>
+	    <xsl:when test="$lock-result='true'">
+		<!-- Do the syntax sanity check before changing it -->
+		<xsl:variable name="check-result">
+		    <xsl:call-template name="check-config"/>
+		</xsl:variable>
+		<xsl:choose>
+		    <!-- If config syntax checks out, proceed -->
+		    <xsl:when test="$check-result='true'">
+			<!-- Make policy configuration changes -->
+			<xsl:variable name="policy">
+			    <load-configuration action="replace">
+				<configuration>
+				    <policy-options>
+					<!-- ##### POLICY PLACEHOLDER ###### DO NOT CHANGE ##### -->
+				    </policy-options>
+				</configuration>
+			    </load-configuration>
+			</xsl:variable>
+			<xsl:variable name="policy-out" select="jcs:invoke($policy)"/>
+			<!-- If all went well, check configuration and commit -->
+			<xsl:choose>
+			    <!-- If something went wrong, return error message -->
+			    <xsl:when test="$policy-out//xnm:error">
+				<xsl:copy-of select="$policy-out//xnm:error"/>
+			    </xsl:when>
+			    <xsl:otherwise>
+				<!-- If everything went well, check and commit -->
+				<xsl:variable name="commit-result">
+				    <xsl:call-template name="commit-config"/>
+				</xsl:variable>
+				<xsl:choose>
+				    <!-- Configuration commited successfully -->
+				    <xsl:when test="$commit-result='true'">
+					<output>
+					    <xsl:text>BGP policies commited successfully</xsl:text>
+					</output>
+				    </xsl:when>
+				    <!-- Commit failed - return error message -->
+				    <xsl:otherwise>
+					<xsl:copy-of select="$commit-result"/>
+				    </xsl:otherwise>
+				</xsl:choose>
+			    </xsl:otherwise>
+			</xsl:choose>
+		    </xsl:when>
+		    <!-- If config syntax pre-check failed, return error message-->
+		    <xsl:otherwise>
+			<xsl:copy-of select="$check-result"/>
+		    </xsl:otherwise>
+		</xsl:choose>
+		<!-- Release configuration lock if it has been locked -->
+		<xsl:variable name="unlock-result">
+		    <xsl:call-template name="unlock-config"/>
+		</xsl:variable>
+		<!-- If configuration unlock failed, return error message -->
+		<xsl:choose>
+		    <xsl:when test="$unlock-result='true'"/>
+		    <xsl:otherwise>
+			<xsl:copy-of select="$unlock-result"/>
+		    </xsl:otherwise>
+		</xsl:choose>
+	    </xsl:when>
+	    <!-- If configuration lock failed, return error message -->
+	    <xsl:otherwise>
+		<xsl:copy-of select="$lock-result"/>
+	    </xsl:otherwise>
+	</xsl:choose>
     </xsl:template>
 
     <xsl:template name="lock-config">

@@ -20,4 +20,33 @@ Supported network platforms:
                     load merge http://<yourhost>/junos/<type>/<name> relative
 
  'junosxsl'     - JunOS, operation script in XSLT format
-                - You can load it and run it as an operational script
+                - You can load it and run it as an operational script:
+
+                   1) Add operation script to your JunOS configuration
+
+                       system {
+                           scripts {
+                               op {
+                                   file bgp-policy.xsl {
+                                       command bgp-policy;
+                                       source http://<yourhost>/junosxsl/policy/<comma-separated-list-of-your-policies>;
+                                   }
+                               }
+                           }
+                       }
+
+                   2) do "set system scripts op file bgp-policy.xsl refresh"
+                      from edit mode (assuming you are at the top) manually
+                      the first time to initially fetch the script.
+
+                   3) from cli mode invoke "op bgp-policy commit" to apply
+                      current BGP policy configuration from the script
+
+                   4) whenever you want to update the script with latest BGP
+                      policy, from cli mode invoke "op bgp-policy refresh" to
+                      fetch fresh contents. Then you can apply new config by
+                      issuing "op bgp-policy commit".
+
+                   5) You'll probably want to automate this by generating
+                      periodic events and triggering "bgp-policy refresh"
+                      followed by "bgp-policy commit" at specific times.

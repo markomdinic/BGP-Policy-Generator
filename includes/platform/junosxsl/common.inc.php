@@ -39,7 +39,7 @@ function junosxsl_begin(&$junos_conf)
     $line = array_shift($junosxsl_wrapper);
     if(empty($line))
       continue;
-    if(preg_match('/POLICY\_PLACEHOLDER/', $line))
+    if(preg_match('/#{5}\sPOLICY\sPLACEHOLDER\s#{6}\sDO\sNOT\sCHANGE\s#{5}/', $line))
       break;
     $junos_conf[] = $line;
   }
