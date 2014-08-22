@@ -32,17 +32,17 @@ function junosxsl_begin(&$junos_conf)
   $script = file_get_contents($config['includes_dir'].'/platform/junosxsl/script.xsl');
   if(empty($script))
     return false;
-  // Split script into individual lines
-  $junosxsl_wrapper = explode("\n", $script);
-  // Copy 'header' part (up to the placeholder)
-  while(count($junosxsl_wrapper)) {
-    $line = array_shift($junosxsl_wrapper);
-    if(empty($line))
-      continue;
-    if(preg_match('/#{5}\sPOLICY\sPLACEHOLDER\s#{6}\sDO\sNOT\sCHANGE\s#{5}/', $line))
-      break;
-    $junos_conf[] = $line;
-  }
+  // Split script into header and footer part. Placeholder line
+  // should appear only once in the script and split it in 2 parts.
+  // If it appears more than once, only the first and the last part
+  // are used as header and footer, respectively, while the middle
+  // is ignored, as it should not have existed in the first place.
+  $junosxsl_wrapper = explode("<!-- ##### POLICY PLACEHOLDER ###### DO NOT CHANGE ##### -->", $script);
+  // Copy the 'header' part of the wrapper
+  $line = array_shift($junosxsl_wrapper);
+  if(empty($line))
+    continue;
+  $junos_conf[] = $line;
 }
 
 function junosxsl_end(&$junos_conf)
@@ -53,8 +53,10 @@ function junosxsl_end(&$junos_conf)
   if(empty($junosxsl_wrapper))
     return;
   // Copy the 'footer' part of the wrapper
-  foreach($junosxsl_wrapper as $line)
-    $junos_conf[] = $line;
+  $line = array_pop($junosxsl_wrapper);
+  if(empty($line))
+    continue;
+  $junos_conf[] = $line;
 }
 
 ?>

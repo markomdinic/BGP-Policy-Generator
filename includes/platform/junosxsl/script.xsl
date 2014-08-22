@@ -3,7 +3,10 @@
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:junos="http://xml.juniper.net/junos/*/junos"
     xmlns:xnm="http://xml.juniper.net/xnm/1.1/xnm"
-    xmlns:jcs="http://xml.juniper.net/junos/commit-scripts/1.0">
+    xmlns:jcs="http://xml.juniper.net/junos/commit-scripts/1.0"
+    xmlns:exsl="http://exslt.org/common"
+    xmlns:ext="http://xmlsoft.org/XSLT/namespace">
+
     <xsl:import href="../import/junos.xsl"/>
 
     <xsl:variable name="arguments">
