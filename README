@@ -77,10 +77,24 @@ It should work.
 
 Proper way - unpack to some dir (say, /opt/bgp-policy-generator), create
 virtual host using /opt/bgp-policy-generator/docroot as DocumentRoot and
-configure that directory with 'AllowOverride all'. Then you can point your
-devices/scripts to
+configure that directory with 'AllowOverride all'. For example:
 
-  http://<hostname>/<platform>/<type>
+<VirtualHost *:80> 
+    ServerName your_vhost
+    DocumentRoot your_install_dir/docroot
+    DirectoryIndex index.php
+</VirtualHost>
+
+<Directory your_install_dir/docroot>
+    Options Indexes FollowSymlinks
+    AllowOverride All
+    Order allow,deny
+    Allow from all
+</Directory>
+
+Then you can point your devices/scripts to
+
+  http://<your_vhost>/<platform>/<type>
 
 and that's it.
 

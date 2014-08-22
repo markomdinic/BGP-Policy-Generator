@@ -20,9 +20,9 @@ Supported network platforms:
                     load merge http://<yourhost>/junos/<type>/<name> relative
 
  'junosxsl'     - JunOS, operation script in XSLT format
-                - You can load it and run it as an operational script:
+                - You can load it and run it as an operation script:
 
-                   1) Add operation script to your JunOS configuration
+                   a) Add operation script to your JunOS configuration
 
                        system {
                            scripts {
@@ -35,18 +35,27 @@ Supported network platforms:
                            }
                        }
 
-                   2) do "set system scripts op file bgp-policy.xsl refresh"
-                      from edit mode (assuming you are at the top) manually
-                      the first time to initially fetch the script.
+                      You have to refresh it manually to get the latest policy
 
-                   3) from cli mode invoke "op bgp-policy commit" to apply
-                      current BGP policy configuration from the script
+                   b) Invoke it manually from cli mode as a remote script:
 
-                   4) whenever you want to update the script with latest BGP
-                      policy, from cli mode invoke "op bgp-policy refresh" to
-                      fetch fresh contents. Then you can apply new config by
-                      issuing "op bgp-policy commit".
+                        op url http://<yourhost>/junosxsl/policy/<comma-separated-list-of-your-policies>
 
-                   5) You'll probably want to automate this by generating
-                      periodic events and triggering "bgp-policy refresh"
-                      followed by "bgp-policy commit" at specific times.
+                   c) Schedule it periodically. For example - 4 times a day:
+
+                      event-options {
+                          generate-event {
+                            AT-0000 time-of-day "00:00:00";
+                            AT-0600 time-of-day "06:00:00";
+                            AT-1200 time-of-day "12:00:00";
+                            AT-1800 time-of-day "18:00:00";
+                          }
+                          policy UPDATE-BGP-POLICY {
+                              events [ AT-0000 AT-0600 AT-1200 AT-1800 ];
+                              then {
+                                  execute-commands {
+                                      commands "op url http://<yourhost>/junosxsl/policy/<comma-separated-list-of-your-policies>";
+                                  }
+                              }
+                          }
+                      }
