@@ -167,16 +167,16 @@ function update_template($autotemplate)
     // Our peer's ASN
     $peer_as = 'AS'.$m[1];
 
-    echo("Fetching prefixes announced by ".$peer_as." to ".$local_as." ...\n");
-
     // To which protocol family should prefixes belong ?
     $family = $policy->getAttribute('family');
     switch($family) {
       case 'inet':
+        echo("Fetching af inet prefixes announced by ".$peer_as." to ".$local_as." ...\n");
         // Get prefixes announced by <peer-as> to <local-as>
         $announced = get_announced_ipv4_prefixes($peer_as, $local_as);
         break;
       case 'inet6':
+        echo("Fetching af inet6 prefixes announced by ".$peer_as." to ".$local_as." ...\n");
         // Get prefixes announced by <peer-as> to <local-as>
         $announced = get_announced_ipv6_prefixes($peer_as, $local_as);
         break;
@@ -187,7 +187,7 @@ function update_template($autotemplate)
     // No point going any further
     // if prefixes are missing
     if(empty($announced)) {
-      echo("Got no prefixes from ".$peer_as.".\n");
+      echo("Got no af ".$family." prefixes from ".$peer_as.".\n");
       return false;
     }
 
@@ -246,8 +246,8 @@ function update_template($autotemplate)
                 if(!preg_match('/'.$regex.'/', $asn))
                   continue;
 
-                // Prefix list name is AS<n>
-                $prefix_list_name = 'AS'.$asn;
+                // Prefix list name is AF-<af>-AS<n>
+                $prefix_list_name = 'AF-'.strtoupper($family).'-AS'.$asn;
 
                 // Begin prefix list template
                 $prefix_list = array("<?xml version=\"1.0\" standalone=\"yes\"?>");
