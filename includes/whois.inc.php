@@ -400,9 +400,9 @@ function as_set($as_set_name, &$members=array(), &$expanded=array())
     if(empty($member))
       continue;
     // String might contain comma-separated AS list
-    foreach(explode(',', strtoupper($member)) as $member) {
+    foreach(preg_split('/[,;:]/', strtoupper($member), PREG_SPLIT_NO_EMPTY) as $member) {
       // Strip leading and trailing trash
-      if(!preg_match('/([^\s:;#]+)/', $member, $m))
+      if(!preg_match('/([^\s#]+)/', $member, $m))
         continue;
       $member = $m[1];
       // If member is a simple ASN ...
