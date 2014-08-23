@@ -191,7 +191,7 @@ function update_template($autotemplate)
       return false;
     }
 
-    echo($peer_as." is announcing ".count(array_keys($announced))." autonomous systems.\n");
+    echo($peer_as." is announcing (af ".$family.") ".count(array_keys($announced))." autonomous systems.\n");
 
     // Process all policy terms within current policy
     foreach($policy->getElementsByTagName('term') as $term) {
@@ -214,26 +214,21 @@ function update_template($autotemplate)
               if(empty($regex))
                 continue 2;
 
-              $maxlen = "";
-
               // Maximum prefix length is optional
               $upto = $p->getAttribute('upto');
               if(is_numeric($upto)) {
                 switch($family) {
                   case 'inet':
                     if($upto < 0 || $upto > 32)
-                      continue 3;
+                      unset($upto);
                     break;
                   case 'inet6':
                     if($upto < 0 || $upto > 128)
-                      continue 3;
+                      unset($upto);
                     break;
                   default:
                     continue 3;
                 }
-                // Prepare upto attribute for
-                // prefix list generation
-                $maxlen = " upto=\"".$upto."\"";
               }
 
               // Loop through all collected prefixes
@@ -255,8 +250,15 @@ function update_template($autotemplate)
                 $prefix_list[] = "    <prefix-list id=\"".$prefix_list_name."\" family=\"".$family."\" origin=\"".$asn."\">";
 
                 // Add prefixes to the prefix list
-                foreach($prefixes as $prefix)
-                  $prefix_list[] = "        <item".$maxlen.">".$prefix."</item>";
+                foreach($prefixes as $prefix) {
+                  // If maximum prefix length is defined ...
+                  if(isset($upto)) {
+                  // ... prefixes must be shorter or equal to the maximum length
+                    if(preg_match('/\/(\d+)$/', $prefix, $m) && ($m[1] <= $upto))
+                      $prefix_list[] = "        <item upto=\"".$upto."\">".$prefix."</item>";
+                  } else
+                    $prefix_list[] = "        <item>".$prefix."</item>";
+                }
 
                 // End prefix list template
                 $prefix_list[] = "    </prefix-list>";
