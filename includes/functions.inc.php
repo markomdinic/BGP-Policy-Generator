@@ -199,6 +199,7 @@ function update_template($autotemplate)
       foreach($term->getElementsByTagName('match') as $match) {
         // Process all prefix list elements under match tag
         $prefix_lists = $match->getElementsByTagName('prefix-list');
+        $num_prefix_list_tags = $prefix_lists->length;
         foreach($prefix_lists as $p) {
           // Auto-update and generate prefix list template ?
           switch($p->getAttribute('update')) {
@@ -306,25 +307,25 @@ function update_template($autotemplate)
         // If match section defines prefix lists,
         // but doesn't have any anymore, it means
         // none were generated, so remove it
-        if(count($prefix_lists) > 0 &&
-           count($match->getElementsByTagName('prefix-list')) < 1)
+        if($num_prefix_list_tags > 0 &&
+           $match->getElementsByTagName('prefix-list')->length < 1)
           // Remove match from the term
           $term->removeChild($match);
         // There can be only one match element
         break;
       }
       // If term doesn't have the match section, remove it
-      if(count($term->getElementsByTagName('match')) < 1)
+      if($term->getElementsByTagName('match')->length < 1)
         // Remove term from the policy
         $policy->removeChild($term);
     }
     // If policy doesn't have any terms, remove it
-    if(count($policy->getElementsByTagName('term')) < 1)
+    if($policy->getElementsByTagName('term')->length < 1)
       // Remove policy from the template
       $autotemplate->removeChild($policy);
   }
   // If autotemplate doesn't have any policies, skip it
-  if(count($autotemplate->getElementsByTagName('policy')) < 1)
+  if($autotemplate->getElementsByTagName('policy')->length < 1)
     return false;
 
   return true;
