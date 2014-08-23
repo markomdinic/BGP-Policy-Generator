@@ -364,10 +364,12 @@ function update_all_templates()
   foreach($autotemplates as $filename => $autotemplate) {
     // Generate config templates from autopolicy template
     if(update_template($autotemplate) === FALSE)
-      // Generators return explicit FALSE on error
-      return false;
+      // If template generator returns explicit FALSE,
+      // move on to the next autopolicy template
+      continue;
+    // Make XML output formatted
     $autotemplate->formatOutput = true;
-    // Save generated template in the policy directory
+    // Save generated template to the policy directory
     $autotemplate->save($config['templates_dir'].'/policy/'.$filename);
   }
 

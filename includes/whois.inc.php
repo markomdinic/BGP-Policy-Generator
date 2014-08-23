@@ -166,8 +166,13 @@ function query_whois($query, $type=NULL, $attr=NULL)
   if(!isset($sock))
     return;
 
-  // All specific matches
-  $command = "-M";
+  // All specific matches and
+  // leave out contact info
+  // to avoid daily limit ban:
+  //
+  //   http://www.ripe.net/data-tools/db/faq/faq-db/why-did-you-receive-the-error-201-access-denied
+  //
+  $command = "-M -r";
   // Preferred object type
   if(!empty($type))
     $command .= " -T".$type;
@@ -287,12 +292,15 @@ function aut_num($asn)
 
   // Copy import attribute(s)
   if(isset($object[$asn]['import'])) {
-    foreach($object[$asn]['import'] as $import) {
+    $imports = is_array($object[$asn]['import']) ?
+                  $object[$asn]['import']:
+                  array($object[$asn]['import']);
+    foreach($imports as $import) {
       // Extract ASN we are importing from
-      if(preg_match('/(?:^|\s+)from\s+([^\s;]+)/i', $import, $m))
+      if(preg_match('/from\s+([^\s:;#]+)/i', $import, $m))
         $from = strtoupper($m[1]);
       // Extract filter that defines what will be imported
-      if(preg_match('/(?:^|\s+)accept\s+([^\s;]+)/i', $import, $m))
+      if(preg_match('/accept\s+([^\s:;#]+)/i', $import, $m))
         $what = strtoupper($m[1]);
       // Store dumbed down version of import attribute
       $aut_num['import'][$from] = $what;
@@ -300,12 +308,15 @@ function aut_num($asn)
   }
   // Copy export attribute(s)
   if(isset($object[$asn]['export'])) {
-    foreach($object[$asn]['export'] as $export) {
+    $exports = is_array($object[$asn]['export']) ?
+                  $object[$asn]['export']:
+                  array($object[$asn]['export']);
+    foreach($exports as $export) {
       // Extract ASN we are exporting to
-      if(preg_match('/(?:^|\s+)to\s+([^\s;]+)/i', $export, $m))
+      if(preg_match('/to\s+([^\s:;#]+)/i', $export, $m))
         $to = strtoupper($m[1]);
       // Extract filter that defines what will be exported
-      if(preg_match('/(?:^|\s+)announce\s+([^\s;]+)/i', $export, $m))
+      if(preg_match('/announce\s+([^\s:;#]+)/i', $export, $m))
         $what = strtoupper($m[1]);
       // Store dumbed down version of export attribute
       $aut_num['export'][$to] = $what;
@@ -313,12 +324,15 @@ function aut_num($asn)
   }
   // Copy mp-import attribute(s)
   if(isset($object[$asn]['mp-import'])) {
-    foreach($object[$asn]['mp-import'] as $import) {
+    $imports = is_array($object[$asn]['mp-import']) ?
+                  $object[$asn]['mp-import']:
+                  array($object[$asn]['mp-import']);
+    foreach($imports as $import) {
       // Extract ASN we are importing from
-      if(preg_match('/(?:^|\s+)from\s+([^\s;]+)/i', $import, $m))
+      if(preg_match('/from\s+([^\s:;#]+)/i', $import, $m))
         $from = strtoupper($m[1]);
       // Extract filter that defines what will be imported
-      if(preg_match('/(?:^|\s+)accept\s+([^\s;]+)/i', $import, $m))
+      if(preg_match('/accept\s+([^\s:;#]+)/i', $import, $m))
         $what = strtoupper($m[1]);
       // Store dumbed down version of import attribute
       $aut_num['mp-import'][$from] = $what;
@@ -326,12 +340,15 @@ function aut_num($asn)
   }
   // Copy mp-export attribute(s)
   if(isset($object[$asn]['mp-export'])) {
-    foreach($object[$asn]['mp-export'] as $export) {
+    $exports = is_array($object[$asn]['mp-export']) ?
+                  $object[$asn]['mp-export']:
+                  array($object[$asn]['mp-export']);
+    foreach($exports as $export) {
       // Extract ASN we are exporting to
-      if(preg_match('/(?:^|\s+)to\s+([^\s;]+)/i', $export, $m))
+      if(preg_match('/to\s+([^\s:;#]+)/i', $export, $m))
         $to = strtoupper($m[1]);
       // Extract filter that defines what will be exported
-      if(preg_match('/(?:^|\s+)announce\s+([^\s;]+)/i', $export, $m))
+      if(preg_match('/announce\s+([^\s:;#]+)/i', $export, $m))
         $what = strtoupper($m[1]);
       // Store dumbed down version of export attribute
       $aut_num['mp-export'][$to] = $what;
@@ -346,12 +363,20 @@ function as_set($as_set_name, &$members=array(), &$expanded=array())
   // Uppercase the AS set name
   $as_set_name = strtoupper($as_set_name);
 
+  // If already expanded, abort
+  if(isset($expanded[$as_set_name]))
+    return;
+
+  // Set ourselves as expanded to prevent
+  // AS-set loops when called recursively
+  $expanded[$as_set_name] = true;
+
   // Fetch AS set data
   $object = query_whois($as_set_name, 'as-set');
   if(!isset($object) || !is_array($object))
     return;
 
-  // Uppercase found object keys
+  // Uppercase found object's keys
   $object = array_change_key_case($object, CASE_UPPER);
 
   // Proper AS set object must have members attribute
@@ -362,10 +387,6 @@ function as_set($as_set_name, &$members=array(), &$expanded=array())
   // Store basic as-set object attributes
   // (only the important ones)
   $as_set = array('as-set' => $as_set_name);
-
-  // Set ourselves as expanded to prevent
-  // AS-set loops when called recursively
-  $expanded[$as_set_name] = true;
 
   // Make sure we will be iterating
   // over array of unique members
@@ -378,23 +399,20 @@ function as_set($as_set_name, &$members=array(), &$expanded=array())
     // Skip parsing errors
     if(empty($member))
       continue;
-    // Uppercase the member
-    $member = strtoupper($member);
-    // If member is a simple ASN ...
-    if(preg_match('/^AS\d+$/i', $member)) {
-      // ... just store it along with the rest
-      $members[$member] = $member;
-    // Otherwise, member could be an as-set, so,
-    // unless it has already been expanded ...
-    } elseif(!isset($expanded[$member])) {
-      // Try to expand it
-      $nested = as_set($member, $members, $expanded);
-      // If member couldn't be expanded ...
-      if(!isset($nested))
-        // ... it might not be as-set after all
-        // so store it as is, since we don't
-        // know what to do with it
-        $members[$member] = $member;
+    // String might contain comma-separated AS list
+    foreach(explode(',', strtoupper($member)) as $member) {
+      // Strip leading and trailing trash
+      if(!preg_match('/([^\s:;#]+)/', $member, $m))
+        continue;
+      $member = $m[1];
+      // If member is a simple ASN ...
+      if(preg_match('/(AS\d+)/i', $member, $m))
+        // ... just store it along with the rest
+        $members[$m[1]] = $m[1];
+      // Otherwise, member should be an as-set ...
+      else
+        // Try to expand it
+        as_set($member, $members, $expanded);
     }
   }
 
