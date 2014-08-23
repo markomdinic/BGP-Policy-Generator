@@ -244,25 +244,32 @@ function update_template($autotemplate)
                 // Prefix list name is AF-<af>-AS<n>
                 $prefix_list_name = 'AF-'.strtoupper($family).'-AS'.$asn;
 
-                // Begin prefix list template
-                $prefix_list = array("<?xml version=\"1.0\" standalone=\"yes\"?>");
-                $prefix_list[] = "<prefix-lists>";
-                $prefix_list[] = "    <prefix-list id=\"".$prefix_list_name."\" family=\"".$family."\" origin=\"".$asn."\">";
-
                 // Add prefixes to the prefix list
+                $prefix_list_items = array();
                 foreach($prefixes as $prefix) {
                   // If maximum prefix length is defined ...
                   if(isset($upto)) {
                   // ... prefixes must be shorter or equal to the maximum length
                     if(preg_match('/\/(\d+)$/', $prefix, $m) && ($m[1] <= $upto))
-                      $prefix_list[] = "        <item upto=\"".$upto."\">".$prefix."</item>";
+                      $prefix_list_items[] = "        <item upto=\"".$upto."\">".$prefix."</item>";
                   } else
-                    $prefix_list[] = "        <item>".$prefix."</item>";
+                    $prefix_list_items[] = "        <item>".$prefix."</item>";
                 }
 
+                // If prefix list has no items ...
+                if(count($prefix_list_items) < 1)
+                  // .. do not update it
+                  continue;
+
+                // Begin prefix list template
+                $prefix_list = "<?xml version=\"1.0\" standalone=\"yes\"?>\n";
+                $prefix_list .= "<prefix-lists>\n";
+                $prefix_list .= "    <prefix-list id=\"".$prefix_list_name."\" family=\"".$family."\" origin=\"".$asn."\">\n";
+                // Insert prefix list items
+                $prefix_list .= implode("\n", $prefix_list_items)."\n";
                 // End prefix list template
-                $prefix_list[] = "    </prefix-list>";
-                $prefix_list[] = "</prefix-lists>";
+                $prefix_list .= "    </prefix-list>\n";
+                $prefix_list .= "</prefix-lists>\n";
 
                 // Write template to a file
                 $fd = fopen($config['templates_dir'].'/prefixlist/'.$prefix_list_name, 'w+');
@@ -271,7 +278,7 @@ function update_template($autotemplate)
                   echo("Aborting: failed to write prefix list file ".$prefix_list_name.".\n");
                   return false;
                 }
-                fwrite($fd, implode("\n", $prefix_list)."\n");
+                fwrite($fd, $prefix_list);
                 fclose($fd);
 
                 // Clone current prefix-list node
