@@ -270,8 +270,12 @@ Takes 1 optional attribute:
 Tag <item> defines each member prefix. Tag's value contains the IPv4 or IPv6 prefix,
 depending on the address family of the prefix list. Takes one optional attribute:
 
- 'upto'   - Maximum prefix length of routes matching this prefix.
-
+ 'upto'   - Maximum prefix length of routes matching this prefix. Not applicable
+            on all platforms. For example, JunOS prefix lists do not specify max
+            prefix length, therefore this attribute is ignored when generating JunOS
+            configuration. In contrast, IOS prefix lists specify max prefix length
+            for each member prefix, thus policy generator makes use of this attribute
+            when generating IOS configuration.
 
 Free-form device-specific configuration
 =======================================
@@ -351,12 +355,11 @@ Attribute update="yes" makes this tag a template tag from which actual <prefix-l
 tags are generated. If this attribute is not present or set to "no", tag is treated
 as static and simply copied as is.
 
-Attribute upto="MAX_PREFIX_LEN" defines maximum prefix length for prefixes contained
-in generated prefix lists, where applicable. For example, JunOS prefix lists do not
-specify max prefix length, therefore this attribute is ignored when generating JunOS
-configuration. In contrast, IOS prefix lists specify max prefix length for each member
-prefix, thus autopolicy generator makes use of this attribute when generating prefix
-list templates.
+Attribute upto="MAX_PREFIX_LEN" defines maximum prefix length for prefixes going into
+generated prefix list templates. Prefixes longer than 'upto' value are ignored and
+won't appear in the generated prefix list templates. For prefixes that do make it into
+generated prefix list templates, 'upto' is copied to the 'upto' attribute of prefix
+list item tags.
 
 So, this tag's effect is two-fold:
 
@@ -369,5 +372,6 @@ So, this tag's effect is two-fold:
 When prefixes are retrieved from Whois/RIS server, tag's value is used as regex that
 is matched against prefixes' origin ASNs. Prefixes whose origin ASNs match this regex
 are selected, others are ignored. Using regular expressions to select prefixes makes
-it possible to 
+it possible to split generated prefixes between terms, should some of them be treated
+differently than others.
 
