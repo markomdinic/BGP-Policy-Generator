@@ -147,62 +147,135 @@ function update_template($autotemplate)
 
   // Don't waste time if template or local ASN is missing
   if(empty($autotemplate) || empty($config['local_as']))
-    return false;
+    return;
 
   // Extract our ASN
   if(!preg_match('/^(?:AS)?(\d+)$/i', $config['local_as'], $m))
-    return false;
+    return;
 
-  // Make sure it is always in AS<n> format
-  $local_as = 'AS'.$m[1];
+  // Make sure it is always in numeric format
+  $local_as = $m[1];
+
+  // This array will receive policies
+  // built as strings in XML format
+  $template_elements = array();
 
   // Process all policies in this autopolicy template
   foreach($autotemplate->getElementsByTagName('policy') as $policy) {
 
+    // Policy ID (name) is mandatory
+    $policy_id = $policy->getAttribute('id');
+    // If policy name is missing
+    // skip to the next policy
+    if(empty($policy_id))
+      continue;
+
     // Peer's AS number is mandatory
     $peer_as = $policy->getAttribute('peer-as');
     if(empty($peer_as) || !preg_match('/^(?:AS)?(\d+)$/i', $peer_as, $m))
-      return false;
+      return;
 
-    // Our peer's ASN
-    $peer_as = 'AS'.$m[1];
+    // Make sure peer's ASN is always in AS<n> format
+    $peer_as = $m[1];
 
     // To which protocol family should prefixes belong ?
     $family = $policy->getAttribute('family');
     switch($family) {
       case 'inet':
-        echo("Fetching af inet prefixes announced by ".$peer_as." to ".$local_as." ...\n");
+        echo("Fetching af inet prefixes announced by AS".$peer_as." to AS".$local_as." ...\n");
         // Get prefixes announced by <peer-as> to <local-as>
-        $announced = get_announced_ipv4_prefixes($peer_as, $local_as);
+        $announced = get_announced_ipv4_prefixes('AS'.$peer_as, 'AS'.$local_as);
         break;
       case 'inet6':
-        echo("Fetching af inet6 prefixes announced by ".$peer_as." to ".$local_as." ...\n");
+        echo("Fetching af inet6 prefixes announced by AS".$peer_as." to AS".$local_as." ...\n");
         // Get prefixes announced by <peer-as> to <local-as>
-        $announced = get_announced_ipv6_prefixes($peer_as, $local_as);
+        $announced = get_announced_ipv6_prefixes('AS'.$peer_as, 'AS'.$local_as);
         break;
       default:
-        return false;
+        // Next policy
+        continue 2;
     }
 
     // No point going any further
     // if prefixes are missing
     if(empty($announced)) {
-      echo("Got no af ".$family." prefixes from ".$peer_as.".\n");
-      return false;
+      echo("Got no af ".$family." prefixes from AS".$peer_as.".\n");
+      return;
     }
 
-    echo($peer_as." is announcing (af ".$family.") ".count(array_keys($announced))." autonomous systems.\n");
+    echo("AS".$peer_as." is announcing (af ".$family.") ".count(array_keys($announced))." autonomous systems.\n");
 
-    // Process all policy terms within current policy
+    // This array will receive terms
+    // built as strings in XML format
+    $policy_elements = array();
+
+    // Process all terms within current policy
     foreach($policy->getElementsByTagName('term') as $term) {
-      // Look for prefix lists within match tag
+
+      // Term ID (name) is mandatory
+      $term_id = $term->getAttribute('id');
+      // If term name is missing,
+      // skip to the next policy
+      if(empty($term_id))
+        continue 2;
+
+      // Term action is mandatory
+      switch($term->getAttribute('action')) {
+        case 'permit':
+          $term_action = "permit";
+          break;
+        case 'deny':
+          $term_action = "deny";
+          break;
+        // Next policy
+        default:
+          continue 3;
+      }
+
+      // This array will receive match and set
+      // elements built as strings in XML format
+      $term_elements = array();
+
+      // Process match element inside current term
       foreach($term->getElementsByTagName('match') as $match) {
-        // Process all prefix list elements under match tag
+
+        // This array will receive prefix list tags
+        // built as strings in XML format
+        $match_elements = array();
+
+        // Process all prefix list tags inside match element
         $prefix_lists = $match->getElementsByTagName('prefix-list');
-        $num_prefix_list_tags = $prefix_lists->length;
         foreach($prefix_lists as $p) {
+
+          // Get the match type, if defined
+          switch($p->getAttribute('match')) {
+            case 'longer':
+              $match_type = "longer";
+              break;
+            case 'orlonger':
+              $match_type = "orlonger";
+              break;
+            default:
+              $match_type = "exact";
+              break;
+          }
+
+          // Get the include flag, if defined
+          switch($p->getAttribute('include')) {
+            case 'true':
+            case 'yes':
+            case 'on':
+            case '1':
+              $include_flag = "yes";
+              break;
+            default:
+              $include_flag = "no";
+              break;
+          }
+
           // Auto-update and generate prefix list template ?
           switch($p->getAttribute('update')) {
+            // Dynamically generated prefix-lists ?
             case 'true':
             case 'yes':
             case 'on':
@@ -235,7 +308,8 @@ function update_template($autotemplate)
 
               // Loop through all collected prefixes
               foreach($announced as $asn => $prefixes) {
-                // Make sure ASN is in AS<n> format
+
+                // Extract AS number from ASN
                 if(!preg_match('/^(?:AS)?(\d+)$/i', $asn, $m))
                   continue;
                 $asn = $m[1];
@@ -253,9 +327,9 @@ function update_template($autotemplate)
                   if(isset($upto)) {
                   // ... prefixes must be shorter or equal to the maximum length
                     if(preg_match('/\/(\d+)$/', $prefix, $m) && ($m[1] <= $upto))
-                      $prefix_list_items[] = "        <item upto=\"".$upto."\">".$prefix."</item>";
+                      $prefix_list_items[] = "<item upto=\"".$upto."\">".$prefix."</item>";
                   } else
-                    $prefix_list_items[] = "        <item>".$prefix."</item>";
+                    $prefix_list_items[] = "<item>".$prefix."</item>";
                 }
 
                 // If prefix list has no items ...
@@ -266,69 +340,167 @@ function update_template($autotemplate)
                 // Begin prefix list template
                 $prefix_list = "<?xml version=\"1.0\" standalone=\"yes\"?>\n";
                 $prefix_list .= "<prefix-lists>\n";
-                $prefix_list .= "    <prefix-list id=\"".$prefix_list_name."\" family=\"".$family."\" origin=\"".$asn."\">\n";
+                $prefix_list .= "<prefix-list id=\"".$prefix_list_name."\" family=\"".$family."\" origin=\"".$asn."\">\n";
                 // Insert prefix list items
                 $prefix_list .= implode("\n", $prefix_list_items)."\n";
                 // End prefix list template
-                $prefix_list .= "    </prefix-list>\n";
+                $prefix_list .= "</prefix-list>\n";
                 $prefix_list .= "</prefix-lists>\n";
 
-                // Write template to a file
-                $fd = fopen($config['templates_dir'].'/prefixlist/'.$prefix_list_name, 'w+');
-                if(!isset($fd) || !is_resource($fd)) {
+                // Convert template to DOM
+                $doc = new DomDocument;
+                $doc->preserveWhiteSpace = false;
+                $doc->validateOnParse = true;
+                // Load prefix list template as a string
+                // and parse it into DOM document
+                $doc->loadXML($prefix_list);
+                // Make XML output properly formatted
+                $doc->formatOutput = true;
+                // Write verified and properly formatted
+                // template to the prefix lists directory
+                $num = $doc->save($config['templates_dir'].'/prefixlist/'.$prefix_list_name);
+                if($num === FALSE) {
                   // Abort at the first sign of trouble
                   echo("Aborting: failed to write prefix list file ".$prefix_list_name.".\n");
-                  return false;
+                  return;
                 }
-                fwrite($fd, $prefix_list);
-                fclose($fd);
 
-                // Clone current prefix-list node
-                $node = $p->cloneNode();
-                if(!isset($node))
-                  continue;
-
-                // Replace node's value with
-                // actual prefix-list name
-                $node->nodeValue = $prefix_list_name;
-                // Remove 'update' attribute
-                $node->removeAttribute('update');
-                // Remove 'upto' attribute
-                $node->removeAttribute('upto');
-                // Put cloned prefix-list node under
-                // match tag, where it belongs ...
-                $match->appendChild($node);
+                // Add tag to the match element
+                // in the policy template
+                $match_elements[] = "<prefix-list match=\"".$match_type."\" include=\"".$include_flag."\">".$prefix_list_name."</prefix-list>\n";
               }
-              // Remove used auto-update node
-              $match->removeChild($p);
+              break;
+            // Static prefix-list tag ...
+            default:
+              // Prefix list name is mandatory
+              $prefix_list_name = $p->nodeValue;
+              // If prefix list name is missing,
+              // skip to the next prefix-list tag
+              if(empty($prefix_list_name))
+                continue 2;
+              // Add tag to the match element
+              // in the policy template
+              $match_elements[] = "<prefix-list match=\"".$match_type."\" include=\"".$include_flag."\">".$prefix_list_name."</prefix-list>\n";
               break;
           }
         }
-        // If match section defines prefix lists,
-        // but doesn't have any anymore, it means
-        // none were generated, so remove it
-        if($num_prefix_list_tags > 0 &&
-           $match->getElementsByTagName('prefix-list')->length < 1)
-          // Remove match from the term
-          $term->removeChild($match);
+
+        // If autopolicy template's match element
+        // specifies prefix list tags, but policy
+        // template we are building ended up with
+        // none, match element is incomplete, thus
+        // making the term invalid.
+
+        // Copy the rest of match conditions
+        if($prefix_lists->length < 1 || count($match_elements) > 0) {
+          // Begin match element in the policy template
+          $term_elements[] = "<match>";
+          // If match conditions are present,
+          // add them to the term element
+          foreach($match->childNodes as $tag) {
+            // Tag name must be known
+            $tag_name = $tag->nodeName;
+            // Skip prefix-lists, we handle them separately
+            if(empty($tag_name) || $tag_name == 'prefix-list')
+              continue;
+            // Tag value must exist ...
+            $tag_value = $tag->nodeValue;
+            // ... even if it is an empty string
+            if(empty($tag_value))
+              $tag_value = "";
+            $attrs = array();
+            // Get all match condition's attributes
+            foreach($tag->attributes as $attr => $attrval) {
+              $val = $attrval->nodeValue;
+              if(!empty($val))
+                $attrs[] = $attr."=\"".$val."\"";
+            }
+            // Add tag to the match element in the policy template
+            $term_elements[] = "<".$tag_name.(count($attrs) > 0 ? " ".implode(" ", $attrs):"").">".$tag_value."</".$tag_name.">";
+          }
+          // Add generated prefix list tags to the policy template
+          $term_elements[] = implode("\n", $match_elements);
+          // Close match element in the policy template
+          $term_elements[] = "</match>";
+        }
         // There can be only one match element
         break;
       }
-      // If term doesn't have the match section, remove it
-      if($term->getElementsByTagName('match')->length < 1)
-        // Remove term from the policy
-        $policy->removeChild($term);
-    }
-    // If policy doesn't have any terms, remove it
-    if($policy->getElementsByTagName('term')->length < 1)
-      // Remove policy from the template
-      $autotemplate->removeChild($policy);
-  }
-  // If autotemplate doesn't have any policies, skip it
-  if($autotemplate->getElementsByTagName('policy')->length < 1)
-    return false;
 
-  return true;
+      // Process set element inside current term
+      foreach($term->getElementsByTagName('set') as $set) {
+        // If term is not empty ...
+        if(count($term_elements) > 0) {
+          // Begin set element in the policy template
+          $term_elements[] = "<set>";
+          // Copy all set statements within the set element
+          foreach($set->childNodes as $tag) {
+            // Tag name must be known
+            $tag_name = $tag->nodeName;
+            if(empty($tag_name))
+              continue;
+            // Tag value must exist ...
+            $tag_value = $tag->nodeValue;
+            // ... even if it is an empty string
+            if(empty($tag_value))
+              $tag_value = "";
+            $attrs = array();
+            // Build all set statement's attributes
+            foreach($tag->attributes as $attr => $attrval) {
+              $val = $attrval->nodeValue;
+              if(!empty($val))
+                $attrs[] = $attr."=\"".$val."\"";
+            }
+            // Add tag to the set element in the policy template
+            $term_elements[] = "<".$tag_name.(count($attrs) > 0 ? " ".implode(" ", $attrs):"").">".$tag_value."</".$tag_name.">";
+          }
+          // Close set element in the policy template
+          $term_elements[] = "</set>";
+        }
+        // There can be only one set element
+        break;
+      }
+
+      // If term is not empty ...
+      if(count($term_elements) > 0) {
+        // ... add it to the policy
+        $policy_elements[] = "<term id=\"".$term_id."\" action=\"".$term_action."\">";
+        $policy_elements[] = implode("\n", $term_elements);
+        $policy_elements[] = "</term>";
+      }
+
+    }
+
+    // If policy is not empty ...
+    if(count($policy_elements) > 0) {
+      // ... add it to the policy template
+      $template_elements[] = "<policy id=\"".$policy_id."\" peer-as=\"".$peer_as."\" family=\"".$family."\">";
+      $template_elements[] = implode("\n", $policy_elements);
+      $template_elements[] = "</policy>";
+    }
+
+  }
+
+  // If at least one policy was generated ...
+  if(count($template_elements) > 0) {
+    // Assemble the complete policy template
+    $template  = "<?xml version=\"1.0\" standalone=\"yes\"?>\n";
+    $template .= "<policies>\n";
+    $template .= implode("\n", $template_elements)."\n";
+    $template .= "</policies>\n";
+    // Convert template to DOM
+    $doc = new DomDocument;
+    $doc->preserveWhiteSpace = false;
+    $doc->validateOnParse = true;
+    // Load template as string
+    // and parse it into DOM
+    $doc->loadXML($template);
+    // Return generated policy template
+    return $doc;
+  }
+
+  // Otherwise, we failed
+  return;
 }
 
 function update_template_by_id($id)
@@ -357,12 +529,13 @@ function update_template_by_id($id)
     }
 
     // Generate config templates from autopolicy template
-    if(update_template($autotemplate) === FALSE)
-      // Generators return explicit FALSE on error
+    $template = update_template($autotemplate);
+    if(!isset($template))
       return false;
-    $autotemplate->formatOutput = true;
-    // Save generated template in the policy directory
-    $autotemplate->save($config['templates_dir'].'/policy/'.$id);
+    // Make XML output properly formatted
+    $template->formatOutput = true;
+    // Save updated template to the policy directory
+    $template->save($config['templates_dir'].'/policy/'.$id);
 
     echo("Autopolicy template ".$id." successfully updated.\n");
   }
@@ -390,15 +563,16 @@ function update_all_templates()
 
   // Process all autopolicy template files
   foreach($autotemplates as $filename => $autotemplate) {
-    // Generate config templates from autopolicy template
-    if(update_template($autotemplate) === FALSE)
-      // If template generator returns explicit FALSE,
-      // move on to the next autopolicy template
+    // Update template from autopolicy template
+    $template = update_template($autotemplate);
+    // If template update failed ...
+    if(!isset($template))
+      // ... move on to the next template
       continue;
-    // Make XML output formatted
-    $autotemplate->formatOutput = true;
-    // Save generated template to the policy directory
-    $autotemplate->save($config['templates_dir'].'/policy/'.$filename);
+    // Make XML output properly formatted
+    $template->formatOutput = true;
+    // Save updated template to the policy directory
+    $template->save($config['templates_dir'].'/policy/'.$filename);
   }
 
   echo("Done.\n");

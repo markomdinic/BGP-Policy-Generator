@@ -400,7 +400,7 @@ function as_set($as_set_name, &$members=array(), &$expanded=array())
     if(empty($member))
       continue;
     // String might contain comma-separated AS list
-    foreach(preg_split('/[,;:]/', strtoupper($member), PREG_SPLIT_NO_EMPTY) as $member) {
+    foreach(preg_split('/[,;:]/', strtoupper($member)) as $member) {
       // Strip leading and trailing trash
       if(!preg_match('/([^\s#]+)/', $member, $m))
         continue;
@@ -535,6 +535,10 @@ function get_announced_ipv4_prefixes($from_asn, $to_asn)
   // Request prefixes for every ASN in the list
   // (slow but more reliable than RIS)
   foreach($exported as $asn) {
+    // Skip target ASN if found among exported ASNs.
+    // No point exporting it to itself.
+    if($asn == $to_asn)
+      continue;
     $prefixes = get_ipv4_prefixes_by_origin($asn);
     if(isset($prefixes))
       $announced[$asn] = $prefixes;
@@ -568,6 +572,10 @@ function get_announced_ipv6_prefixes($from_asn, $to_asn)
   // Request prefixes for every ASN in the list
   // (slow but more reliable than RIS)
   foreach($exported as $asn) {
+    // Skip target ASN if found among exported ASNs.
+    // No point exporting it to itself.
+    if($asn == $to_asn)
+      continue;
     $prefixes = get_ipv6_prefixes_by_origin($asn);
     if(isset($prefixes))
       $announced[$asn] = $prefixes;
