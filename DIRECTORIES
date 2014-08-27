@@ -1,0 +1,18 @@
+
+<install_dir>/docroot               - Where the DocumentRoot (or the equivalent) should point.
+                                      Contents of this directory are served via HTTP.
+
+<install_dir/templates              - Where the autopolicy and configuration templates reside.
+<install_dir/templates/autopolicy   - Where you should put your autopolicy templates.
+<install_dir/templates/policy       - Where you should put your policy templates and where
+                                      autopolicy generator puts generated policy templates.
+<install_dir/templates/prefixlist   - Where you should put your prefix list templates and where
+                                      autopolicy generator puts generated prefix list templates.
+
+<install_dir>/includes              - Where most of the code is.
+<install_dir>/includes/platform     - Where platform-specific code resides. Each platform keeps
+                                      it's generator files in it's own directory. By specifying
+                                      platform in URL or command line, you directly reference
+                                      it's subdirectory. By specifying configuration type, you
+                                      directly reference generator include files within platform
+                                      subdirectory.

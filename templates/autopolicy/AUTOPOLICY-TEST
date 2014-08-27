@@ -4,7 +4,7 @@
 	<term action="permit" id="peer">
 	    <match>
 	        <protocol>bgp</protocol>
-		<prefix-list match="orlonger" upto="24" include="yes" update="yes">^31042$</prefix-list>
+		<auto-prefix-list origin="^31042$" aggregate="no" upto="24" filter="\/(16|17|18|19)$" match="orlonger" include="yes">PEER</auto-prefix-list>
 	    </match>
 	    <set>
 		<local-preference>300</local-preference>
@@ -15,7 +15,7 @@
 	<term action="permit" id="peers-customers">
 	    <match>
 	        <protocol>bgp</protocol>
-		<prefix-list match="orlonger" upto="24" include="yes" update="yes">^(?!31042)\d+$</prefix-list>
+		<auto-prefix-list origin="^(?!31042)\d+$" aggregate="yes" upto="24" match="orlonger" include="yes"/>
 	    </match>
 	    <set>
 		<local-preference>200</local-preference>

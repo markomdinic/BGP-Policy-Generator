@@ -244,7 +244,7 @@ function update_template($autotemplate)
         $match_elements = array();
 
         // Process all prefix list tags inside match element
-        $prefix_lists = $match->getElementsByTagName('prefix-list');
+        $prefix_lists = $match->getElementsByTagName('auto-prefix-list');
         foreach($prefix_lists as $p) {
 
           // Get the match type, if defined
@@ -273,116 +273,128 @@ function update_template($autotemplate)
               break;
           }
 
-          // Auto-update and generate prefix list template ?
-          switch($p->getAttribute('update')) {
-            // Dynamically generated prefix-lists ?
+          // Maximum prefix length is optional
+          $upto = $p->getAttribute('upto');
+          if(is_numeric($upto)) {
+            switch($family) {
+              case 'inet':
+                if($upto < 0 || $upto > 32)
+                  unset($upto);
+                break;
+              case 'inet6':
+                if($upto < 0 || $upto > 128)
+                  unset($upto);
+                break;
+              default:
+                // Next policy
+                continue 6;
+            }
+          }
+
+          // This mandatory attribute defines a regular expression
+          // used to select prefixes automatically collected from
+          // Whois/RIS server by their origin AS. Auto prefix list
+          // tag expands into a series of prefix lists selected by
+          // this regular expression.
+          $origin_regex = $p->getAttribute('origin');
+          if(empty($origin_regex))
+            continue;
+
+          // This optional attribute, if defined and set to 'yes'
+          // anables per-prefix-list prefix aggregation. By default
+          // aggregation is disabled
+          switch($p->getAttribute('aggregate')) {
             case 'true':
             case 'yes':
             case 'on':
             case '1':
-              // In this case, this tag's value is a regex
-              // which expands this tag into a series of
-              // prefix-list tags pointing to prefix lists
-              // holding prefixes originated by ASNs that
-              // match this regular expression
-              $regex = $p->nodeValue;
-              if(empty($regex))
-                continue 2;
-
-              // Maximum prefix length is optional
-              $upto = $p->getAttribute('upto');
-              if(is_numeric($upto)) {
-                switch($family) {
-                  case 'inet':
-                    if($upto < 0 || $upto > 32)
-                      unset($upto);
-                    break;
-                  case 'inet6':
-                    if($upto < 0 || $upto > 128)
-                      unset($upto);
-                    break;
-                  default:
-                    continue 3;
-                }
-              }
-
-              // Loop through all collected prefixes
-              foreach($announced as $asn => $prefixes) {
-
-                // Extract AS number from ASN
-                if(!preg_match('/^(?:AS)?(\d+)$/i', $asn, $m))
-                  continue;
-                $asn = $m[1];
-                // Skip if current ASN doesn't match
-                if(!preg_match('/'.$regex.'/', $asn))
-                  continue;
-
-                // Prefix list name is AF-<af>-AS<n>
-                $prefix_list_name = 'AF-'.strtoupper($family).'-AS'.$asn;
-
-                // Add prefixes to the prefix list
-                $prefix_list_items = array();
-                foreach($prefixes as $prefix) {
-                  // If maximum prefix length is defined ...
-                  if(isset($upto)) {
-                  // ... prefixes must be shorter or equal to the maximum length
-                    if(preg_match('/\/(\d+)$/', $prefix, $m) && ($m[1] <= $upto))
-                      $prefix_list_items[] = "<item upto=\"".$upto."\">".$prefix."</item>";
-                  } else
-                    $prefix_list_items[] = "<item>".$prefix."</item>";
-                }
-
-                // If prefix list has no items ...
-                if(count($prefix_list_items) < 1)
-                  // .. do not update it
-                  continue;
-
-                // Begin prefix list template
-                $prefix_list = "<?xml version=\"1.0\" standalone=\"yes\"?>\n";
-                $prefix_list .= "<prefix-lists>\n";
-                $prefix_list .= "<prefix-list id=\"".$prefix_list_name."\" family=\"".$family."\" origin=\"".$asn."\">\n";
-                // Insert prefix list items
-                $prefix_list .= implode("\n", $prefix_list_items)."\n";
-                // End prefix list template
-                $prefix_list .= "</prefix-list>\n";
-                $prefix_list .= "</prefix-lists>\n";
-
-                // Convert template to DOM
-                $doc = new DomDocument;
-                $doc->preserveWhiteSpace = false;
-                $doc->validateOnParse = true;
-                // Load prefix list template as a string
-                // and parse it into DOM document
-                $doc->loadXML($prefix_list);
-                // Make XML output properly formatted
-                $doc->formatOutput = true;
-                // Write verified and properly formatted
-                // template to the prefix lists directory
-                $num = $doc->save($config['templates_dir'].'/prefixlist/'.$prefix_list_name);
-                if($num === FALSE) {
-                  // Abort at the first sign of trouble
-                  echo("Aborting: failed to write prefix list file ".$prefix_list_name.".\n");
-                  return;
-                }
-
-                // Add tag to the match element
-                // in the policy template
-                $match_elements[] = "<prefix-list match=\"".$match_type."\" include=\"".$include_flag."\">".$prefix_list_name."</prefix-list>\n";
-              }
+              $aggregate = true;
               break;
-            // Static prefix-list tag ...
             default:
-              // Prefix list name is mandatory
-              $prefix_list_name = $p->nodeValue;
-              // If prefix list name is missing,
-              // skip to the next prefix-list tag
-              if(empty($prefix_list_name))
-                continue 2;
-              // Add tag to the match element
-              // in the policy template
-              $match_elements[] = "<prefix-list match=\"".$match_type."\" include=\"".$include_flag."\">".$prefix_list_name."</prefix-list>\n";
+              $aggregate = false;
               break;
           }
+
+          // This optional attribute, if defined, represents regex
+          // that directly filters prefixes automatically collected
+          // from Whois/RIS server.
+          $prefix_regex = $p->getAttribute('filter');
+
+          // Tag's value is optional and, if defined, represents
+          // string to prepend to auto-generated prefix list name.
+          $name_prepend = empty($p->nodeValue) ? '':$p->nodeValue.'-';
+
+          // Loop through all collected prefixes
+          foreach($announced as $origin_as => $prefixes) {
+
+            // Extract AS number from ASN
+            if(!preg_match('/^(?:AS)?(\d+)$/i', $origin_as, $m))
+              continue;
+            $origin_as = $m[1];
+
+            // Skip if current ASN doesn't match
+            if(!preg_match('/'.$origin_regex.'/', $origin_as))
+              continue;
+
+            // Prefix list name is [<prepend>-]AF-<af>-AS<n>
+            $prefix_list_name = $name_prepend.'AF-'.strtoupper($family).'-AS'.$origin_as;
+
+            $prefix_list_items = array();
+
+            // If aggregation is enabled ...
+            if($aggregate)
+              // ... aggregate IPv4 prefixes
+              $prefixes = aggregate_ipv4($prefixes);
+
+            // Add prefixes to the prefix list
+            foreach($prefixes as $prefix) {
+              // If maximum prefix length is defined, prefixes must be
+              // shorter or equal to the maximum prefix length
+              if(isset($upto) && preg_match('/\/(\d+)$/', $prefix, $m) && $m[1] > $upto)
+                continue;
+              // If filter regex is defined, filter out prefixes not matching it
+              if(empty($prefix_regex) || preg_match('/'.$prefix_regex.'/', $prefix))
+                $prefix_list_items[] = "<item".(empty($upto) ? "":" upto=\"".$upto."\"").">".$prefix."</item>";
+            }
+
+            // If prefix list has no items ...
+            if(count($prefix_list_items) < 1)
+              // .. do not update it
+              continue;
+
+            // Begin prefix list template
+            $prefix_list = "<?xml version=\"1.0\" standalone=\"yes\"?>\n";
+            $prefix_list .= "<prefix-lists>\n";
+            $prefix_list .= "<prefix-list id=\"".$prefix_list_name."\" family=\"".$family."\" origin=\"".$origin_as."\">\n";
+            // Insert prefix list items
+            $prefix_list .= implode("\n", $prefix_list_items)."\n";
+            // End prefix list template
+            $prefix_list .= "</prefix-list>\n";
+            $prefix_list .= "</prefix-lists>\n";
+
+            // Convert template to DOM
+            $doc = new DomDocument;
+            $doc->preserveWhiteSpace = false;
+            $doc->validateOnParse = true;
+            // Load prefix list template as a string
+            // and parse it into DOM document
+            $doc->loadXML($prefix_list);
+            // Make XML output properly formatted
+            $doc->formatOutput = true;
+            // Write verified and properly formatted
+            // template to the prefix lists directory
+            $num = $doc->save($config['templates_dir'].'/prefixlist/'.$prefix_list_name);
+            if($num === FALSE) {
+              // Abort at the first sign of trouble
+              echo("Aborting: failed to write prefix list file ".$prefix_list_name.".\n");
+              return;
+            }
+
+            // Add tag to the match element
+            // in the policy template
+            $match_elements[] = "<prefix-list match=\"".$match_type."\" include=\"".$include_flag."\">".$prefix_list_name."</prefix-list>\n";
+          }
+
         }
 
         // If autopolicy template's match element
@@ -401,7 +413,7 @@ function update_template($autotemplate)
             // Tag name must be known
             $tag_name = $tag->nodeName;
             // Skip prefix-lists, we handle them separately
-            if(empty($tag_name) || $tag_name == 'prefix-list')
+            if(empty($tag_name) || $tag_name == 'auto-prefix-list')
               continue;
             // Tag value must exist ...
             $tag_value = $tag->nodeValue;

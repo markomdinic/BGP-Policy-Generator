@@ -272,10 +272,12 @@ depending on the address family of the prefix list. Takes one optional attribute
 
  'upto'   - Maximum prefix length of routes matching this prefix. Not applicable
             on all platforms. For example, JunOS prefix lists do not specify max
-            prefix length, therefore this attribute is ignored when generating JunOS
-            configuration. In contrast, IOS prefix lists specify max prefix length
-            for each member prefix, thus policy generator makes use of this attribute
-            when generating IOS configuration.
+            prefix length. In contrast, IOS prefix lists specify max prefix length
+            for each member prefix. Therefore, generators for some platforms, like
+            Cisco IOS, will use 'upto' to generate prefix lists that match both
+            exact prefixes and their more specific children up to the 'upto' prefix
+            length. Others, like JunOS generator, will ignore this attribute and
+            specify prefix length limits within policy.
 
 Free-form device-specific configuration
 =======================================
@@ -344,34 +346,68 @@ Tag <policy> uses 2 mandatory attributes:
  'family'  - Used to determine the address family of generated prefix lists. It can
              either be 'inet' for IPv4 prefixes, or 'inet6' for IPv6.
 
-Tag <prefix-list> within <match> tag takes additional attributes 'upto' and 'update'.
-Also, the value of this tag is not a prefix list name, but a regexp. When generating
-policies using autopolicy template, this tag is used to specify which prefix lists
-should be generated and what <prefix-list> tag should look like in generated policy.
+Tag <auto-prefix-list> within <match> takes the same attributes as <prefix-list>
+with a few differences - additional attributes 'origin', 'aggregate', 'upto' and
+'filter'. Also, the value of this tag is not mandatory and not a prefix list name,
+but an optional string to prepend to the generated prefix list name.
 
-<prefix-list match="exact|longer|orlonger" upto="MAXIMUM_PREFIX_LENGTH" include="yes|no" update="yes|no">ASN_REGEX</prefix-list>
+        <auto-prefix-list match="exact|longer|orlonger" include="yes|no"
+         origin="ASN_REGEX" aggregate="yes|no" upto="MAXIMUM_PREFIX_LENGTH"
+         filter="PREFIX_REGEX">NAME_PREPEND_STRING</auto-prefix-list>
 
-Attribute update="yes" makes this tag a template tag from which actual <prefix-list>
-tags are generated. If this attribute is not present or set to "no", tag is treated
-as static and simply copied as is.
+ 'origin'    - Selects prefixes by their origin. Prefixes whose origin ASNs match
+               this regex will be used to generate prefix lists and their respective
+               <prefix-list> tags in place of <auto-prefix-list>. This means that not
+               only does this regex picks which prefix lists will be generated, but
+               also defines the exact spot inside generated policy template these
+               prefix lists will be referenced from.
+ 'aggregate' - Indicates whether collected prefixes should be aggregated into largest
+               possible blocks prior to generating prefix lists. Works only on IPv4
+               at the moment. Can be 'yes' or 'no'.
 
-Attribute upto="MAX_PREFIX_LEN" defines maximum prefix length for prefixes going into
-generated prefix list templates. Prefixes longer than 'upto' value are ignored and
-won't appear in the generated prefix list templates. For prefixes that do make it into
-generated prefix list templates, 'upto' is copied to the 'upto' attribute of prefix
-list item tags.
+ 'upto'      - Defines maximum prefix length for prefixes going into generated prefix
+               list templates. Prefixes longer than 'upto' value are ignored and won't
+               appear in the generated prefix list templates. For prefixes that do make
+               it into generated prefix list templates, 'upto' is copied to the 'upto'
+               attribute of prefix list item tags.
+
+ 'filter'    - A regular expression used to select prefixes. When generating policies
+               using autopolicy template, this attribute is used to specify which
+               prefix lists and matching <prefix-list> tags should be generated.
+
+Since there are several criteria that determine the fate of a prefix, it is important
+to understand how they relate to each other:
+
+                      origin => aggregate => upto => filter
+
+First, origin regex selects prefixes by origin. Since prefix-lists group prefixes
+by origin, this effectively determines which prefix lists will be generated.
+
+Once prefixes (and thus prefix lists) are selected, per-prefix-list aggregation is
+performed if aggregate="yes" is configured. Prefix lists will contain only the
+largest possible address blocks.
+
+Aggregated prefixes are then filtered with 'upto' attribute which weeds out prefixes
+which are more specific than 'upto' value. This may seem reduntant since aggregation
+does similar thing. However, aggregation concatenates adjacent address blocks into
+larger blocks, making prefix lists smaller without loosing any information, while
+'upto' attribute drops any prefix that is longer than specified, whether a part of
+information is lost or not. In other words, aggregation is given a chance to gracefully
+solve the problem of long prefixes before the 'upto' hacksaw removes anything that
+sticks out. Also, many prefixes simply cannot be aggregated - 'upto' will drop longer
+prefixes indiscriminately. Finally, 'upto' is used in <item> tags of generated
+prefix list templates. It's use there depends on the target platform.
+
+At last, prefixes that survived previous filtering will be matched against value of
+'filter' attribute, if it is defined. It is a regular expression that matches
+prefixes directly, so you can do (almost) whatever you want here.
 
 So, this tag's effect is two-fold:
 
  1) it is used to generate prefix-list templates
  2) it is used as a template for actual prefix-list tags that will take it's place
-    in generated policy template. Tag is literally cloned as many times as there
-    are auto-generated prefix lists, with it's value replaced by the actual prefix
-    list name and autopolicy attributes 'upto' and 'update' removed.
+    in generated policy template.
 
-When prefixes are retrieved from Whois/RIS server, tag's value is used as regex that
-is matched against prefixes' origin ASNs. Prefixes whose origin ASNs match this regex
-are selected, others are ignored. Using regular expressions to select prefixes makes
-it possible to split generated prefixes between terms, should some of them be treated
-differently than others.
-
+Using regular expressions to select prefixes by several criteria makes it possible to
+divide generated prefixes between terms, should some of them be treated differently
+than others.
