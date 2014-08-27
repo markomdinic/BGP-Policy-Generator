@@ -503,7 +503,7 @@ function update_template($autotemplate)
     // Assemble the complete policy template
     $template  = "<?xml version=\"1.0\" standalone=\"yes\"?>\n";
     $template .= "<policies>\n";
-    $template .= implode("\n", $template_elements)."\n";
+    $template .= implode("\n", $template_elements);
     $template .= "</policies>\n";
     // Convert template to DOM
     $doc = new DomDocument;
@@ -511,7 +511,6 @@ function update_template($autotemplate)
     $doc->validateOnParse = true;
     // Load template as string
     // and parse it into DOM
-print $template."\n\n";
     $doc->loadXML($template);
     // Return generated policy template
     return $doc;
