@@ -43,6 +43,15 @@ function is_ipv6($prefix)
   return false;
 }
 
+function is_valid_subnet_size($size)
+{
+  // This basically determines if size is a power of 2,
+  // as valid subnet sizes are powers of 2. If size is
+  // a number that is a power of 2, it will have no bits
+  // in common with the preceeding number.
+  return ($size & ($size-1)) ? false:true;
+}
+
 function aggregate_ipv4($prefix_list)
 {
   //
@@ -78,7 +87,7 @@ function aggregate_ipv4($prefix_list)
 
     foreach($nonaggregated as $current_network_address => $cidr) {
       // Network address of the subnet immediately following this one
-      $next_network_address = $current_network_address + pow(2, 32 - $cidr);
+      $next_network_address = $current_network_address + (1 << (32 - $cidr));
       //
       // Aggregated prefix must be divisible by it's subnet size,
       // like any other prefix. Keep aggregating while this is true.
@@ -92,7 +101,8 @@ function aggregate_ipv4($prefix_list)
       // so keep aggregating. Once we hit different result, current
       // address block is done, sotre it and start the next one.
       //
-      if((($aggregated_block_network_address & ~$aggregated_block_size) % $aggregated_block_size) ||
+      if(!is_valid_subnet_size($aggregated_block_size) ||
+         ($aggregated_block_network_address % $aggregated_block_size) ||
          ($current_network_address - $prev_broadcast_address != 1)) {
         // Calculate CIDR of aggregated prefix
         $hostmask = $aggregated_block_network_address ^ $prev_broadcast_address;
@@ -102,7 +112,7 @@ function aggregate_ipv4($prefix_list)
           $aggregated_block_prefix_length--;
         }
         // Broadcast address of aggregated block
-        $aggregated_block_broadcast_address = $aggregated_block_network_address + pow(2, 32 - $aggregated_block_prefix_length) - 1;
+        $aggregated_block_broadcast_address = $aggregated_block_network_address + (1 << (32 - $aggregated_block_prefix_length)) - 1;
         // Current address block must be outside
         // already aggregated address block
         if($current_network_address > $aggregated_block_broadcast_address) {
@@ -149,7 +159,7 @@ function aggregate_ipv4($prefix_list)
     $network = ip2long($network);
     // Network address must be divisible by subnet size,
     // ignore prefixes with wrong prefix lengths
-    if($network % pow(2, 32 - $cidr))
+    if($network % (1 << (32 - $cidr)))
       continue;
     // If network is already known, but prefix lengths
     // differ, use the less specific one, as it covers
