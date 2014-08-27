@@ -52,15 +52,6 @@ function is_valid_subnet_size($size)
   return ($size & ($size-1)) ? false:true;
 }
 
-function aggregate_ipv4($prefix_list)
-{
-  //
-  // This is the aggregator function itself.
-  //
-  // It takes array of network => cidr pairs and produces
-  // similar array of aggregated networks. It cannot always
-  // aggregate everything in a single pass, so it may be
-  // called recursively.
   function aggregator($nonaggregated) {
 
     $num_nonaggregated = count($nonaggregated);
@@ -142,7 +133,17 @@ function aggregate_ipv4($prefix_list)
     }
     // Call self recursively for the next aggregation pass
     return aggregator($aggregated, $num_nonaggregated);
-  };
+  }
+
+function aggregate_ipv4($prefix_list)
+{
+  //
+  // This is the aggregator function itself.
+  //
+  // It takes array of network => cidr pairs and produces
+  // similar array of aggregated networks. It cannot always
+  // aggregate everything in a single pass, so it may be
+  // called recursively.
 
   // Prefixes are given as an array of strings in CIDR format and
   // will be converted to numeric format and placed in this array.

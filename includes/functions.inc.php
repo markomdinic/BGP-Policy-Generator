@@ -412,8 +412,8 @@ function update_template($autotemplate)
           foreach($match->childNodes as $tag) {
             // Tag name must be known
             $tag_name = $tag->nodeName;
-            // Skip prefix-lists, we handle them separately
-            if(empty($tag_name) || $tag_name == 'auto-prefix-list')
+            // Skip comments, ignore auto-prefix-list tags
+            if(empty($tag_name) || $tag_name == '#comment' || $tag_name == 'auto-prefix-list')
               continue;
             // Tag value must exist ...
             $tag_value = $tag->nodeValue;
@@ -422,10 +422,12 @@ function update_template($autotemplate)
               $tag_value = "";
             $attrs = array();
             // Get all match condition's attributes
-            foreach($tag->attributes as $attr => $attrval) {
-              $val = $attrval->nodeValue;
-              if(!empty($val))
-                $attrs[] = $attr."=\"".$val."\"";
+            if($tag->hasAttributes()) {
+              foreach($tag->attributes as $attr => $attrval) {
+                $val = $attrval->nodeValue;
+                if(!empty($val))
+                  $attrs[] = $attr."=\"".$val."\"";
+              }
             }
             // Add tag to the match element in the policy template
             $term_elements[] = "<".$tag_name.(count($attrs) > 0 ? " ".implode(" ", $attrs):"").">".$tag_value."</".$tag_name.">";
@@ -449,7 +451,8 @@ function update_template($autotemplate)
           foreach($set->childNodes as $tag) {
             // Tag name must be known
             $tag_name = $tag->nodeName;
-            if(empty($tag_name))
+            // Skip comments
+            if(empty($tag_name) || $tag_name == '#comment')
               continue;
             // Tag value must exist ...
             $tag_value = $tag->nodeValue;
@@ -458,10 +461,12 @@ function update_template($autotemplate)
               $tag_value = "";
             $attrs = array();
             // Build all set statement's attributes
-            foreach($tag->attributes as $attr => $attrval) {
-              $val = $attrval->nodeValue;
-              if(!empty($val))
-                $attrs[] = $attr."=\"".$val."\"";
+            if($tag->hasAttributes()) {
+              foreach($tag->attributes as $attr => $attrval) {
+                $val = $attrval->nodeValue;
+                if(!empty($val))
+                  $attrs[] = $attr."=\"".$val."\"";
+              }
             }
             // Add tag to the set element in the policy template
             $term_elements[] = "<".$tag_name.(count($attrs) > 0 ? " ".implode(" ", $attrs):"").">".$tag_value."</".$tag_name.">";
@@ -506,6 +511,7 @@ function update_template($autotemplate)
     $doc->validateOnParse = true;
     // Load template as string
     // and parse it into DOM
+print $template."\n\n";
     $doc->loadXML($template);
     // Return generated policy template
     return $doc;
