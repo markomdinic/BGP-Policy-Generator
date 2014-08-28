@@ -287,7 +287,7 @@ function update_template($autotemplate)
                 break;
               default:
                 // Next policy
-                continue 6;
+                continue 5;
             }
           }
 
@@ -342,9 +342,19 @@ function update_template($autotemplate)
             $prefix_list_items = array();
 
             // If aggregation is enabled ...
-            if($aggregate)
-              // ... aggregate IPv4 prefixes
-              $prefixes = aggregate_ipv4($prefixes);
+            if($aggregate) {
+              switch($family) {
+                case 'inet':
+                  // ... aggregate IPv4 prefixes
+                  $prefixes = aggregate_ipv4($prefixes);
+                  break;
+                case 'inet6':
+                  break;
+                default:
+                  // Next policy
+                  continue 6;
+              }
+            }
 
             // Add prefixes to the prefix list
             foreach($prefixes as $prefix) {
