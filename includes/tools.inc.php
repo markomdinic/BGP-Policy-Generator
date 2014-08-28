@@ -52,10 +52,100 @@ function is_valid_subnet_size($size)
   return ($size & ($size-1)) ? false:true;
 }
 
-function prefix_aggregator($nonaggregated, $address_length=32)
+function prefix_aggregator32($nonaggregated, $address_length=32)
 {
   //
-  // This is the IP subent aggregator function.
+  // IP subnet aggregator function for 32-bit machines.
+  //
+  // It takes array of network => cidr pairs and produces
+  // similar array of aggregated networks. It cannot always
+  // aggregate everything in a single pass, so it may be
+  // called recursively.
+  //
+
+  $num_nonaggregated = count($nonaggregated);
+
+  // Add dummy prefix to make loop run one extra iteration.
+  // Otherwise, last prefix in the list would've been lost
+  // or we would have to duplicate a part of the code.
+  $nonaggregated[sprintf('%u', ((1 << $address_length) - 2))] = $address_length;
+
+  // Sort prefixes by network addresses in ascending order
+  // to prevent searching for neighboring address blocks
+  // accross the prefix list
+  ksort($nonaggregated);
+
+  // Get the first prefix in the list of sorted network addresses
+  $pending_aggregated_block_network_address =  key($nonaggregated);
+  // False previous broadcast addresses to get the loop running
+  $prev_broadcast_address = $pending_aggregated_block_network_address - 1;
+  $prev_aggregated_block_broadcast_address = $prev_broadcast_address;
+
+  // This array will collect aggregated prefixes
+  $aggregated = array();
+
+  foreach($nonaggregated as $current_network_address => $cidr) {
+    // Skip address blocks that fall into already aggregated range
+    if($prev_aggregated_block_broadcast_address >= $current_network_address)
+      continue;
+    // Network address of the subnet immediately following this one
+    $next_network_address = $current_network_address + (1 << ($address_length - $cidr));
+    //
+    // Aggregated prefix must have a valid subnet size that is
+    // a power of two and be divisible by it's subnet size, just
+    // like any other prefix. Keep aggregating while this is true.
+    // Once we get to the invalid subnet size, stop aggregating
+    // current address block, store it and start the next one.
+    //
+    // Also ...
+    //
+    // As long as current network and previous broadcast address
+    // are next to each other, we are in the same address block,
+    // so keep aggregating. Once we hit different result, current
+    // address block is done, sotre it and start the next one.
+    //
+    $candidate_aggregated_block_size = $next_network_address - $pending_aggregated_block_network_address;
+    if(!is_valid_subnet_size($candidate_aggregated_block_size) ||
+       (floatval($pending_aggregated_block_network_address) % floatval($candidate_aggregated_block_size)) ||
+       ($current_network_address - $prev_broadcast_address > 1)) {
+      // Calculate CIDR of aggregated prefix
+      $hostmask = floatval($pending_aggregated_block_network_address) ^ floatval($prev_broadcast_address);
+      $aggregated_block_prefix_length = $address_length;
+      while($hostmask > 0) {
+        $hostmask >>= 1;
+        $aggregated_block_prefix_length--;
+      }
+      // If pending aggregated block lies outside previous aggregated block ...
+      if($pending_aggregated_block_network_address > $prev_aggregated_block_broadcast_address) {
+        // ... aggregated block is complete - add prefix to the list ...
+        $aggregated[$pending_aggregated_block_network_address] = $aggregated_block_prefix_length;
+        // ... and keep aggregated block's broadcast address
+        $prev_aggregated_block_broadcast_address = $prev_broadcast_address;
+      }
+      // Begin aggregating next address block
+      $pending_aggregated_block_network_address = $current_network_address;
+    }
+    // Broadcast address of current prefix
+    // to be used in the next iteration
+    $prev_broadcast_address = $next_network_address - 1;
+  }
+
+  // Recursion ends once no aggregation has occured.
+  // We determine that when the number of produced
+  // aggregated prefixes remains equal to the number
+  // of input (non-aggregated) prefixes.
+  if(count($aggregated) >= $num_nonaggregated)
+    return $aggregated;
+
+  // Otherwise, call self recursively
+  // for the next aggregation pass
+  return prefix_aggregator32($aggregated);
+}
+
+function prefix_aggregator64($nonaggregated, $address_length=32)
+{
+  //
+  // IP subnet aggregator function for 64-bit machines.
   //
   // It takes array of network => cidr pairs and produces
   // similar array of aggregated networks. It cannot always
@@ -139,7 +229,7 @@ function prefix_aggregator($nonaggregated, $address_length=32)
 
   // Otherwise, call self recursively
   // for the next aggregation pass
-  return prefix_aggregator($aggregated);
+  return prefix_aggregator64($aggregated);
 }
 
 function aggregate_ipv4($prefix_list)
@@ -166,13 +256,22 @@ function aggregate_ipv4($prefix_list)
     // the range of more specific one, as well.
     if(isset($prefixes[$network]) && $prefixes[$network] <= $cidr)
       continue;
+    // Stupid PHP: this is the only way to get around
+    // signed long integers on 32-bit machines
+    if(PHP_INT_SIZE == 4)
+      $network = sprintf('%u', $network);
     // network => cidr
     $prefixes[$network] = $cidr;
   }
   // We are now ready to aggregate
+  $prefixes = (PHP_INT_SIZE == 4) ?
+                 prefix_aggregator32($prefixes):
+                 prefix_aggregator64($prefixes);
+  if(empty($prefixes))
+    return;
   $aggregated_prefixes = array();
   // Convert prefixes from numeric to CIDR string format
-  foreach(prefix_aggregator($prefixes) as $network => $cidr)
+  foreach($prefixes as $network => $cidr)
     // Add aggregated block's prefix to the list
     $aggregated_prefixes[] = long2ip($network)."/".$cidr;
   // Aggregation is done
