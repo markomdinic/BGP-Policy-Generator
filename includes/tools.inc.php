@@ -251,19 +251,25 @@ function aggregate_ipv4($prefix_list)
       continue;
     // Confert dotted decimal into integer format
     $network = ip2long($network);
+    // Stupid PHP: this is the only way to get around
+    // signed long integers on 32-bit machines. Addresses
+    // above 127.255.255.255 are converted to negative
+    // 32-bit integers. Converting them to unsigned int
+    // represented as string circumvents the problem.
+    if(PHP_INT_SIZE == 4)
+      $network = sprintf('%u', $network);
     // Network address must be divisible by subnet size,
-    // ignore prefixes with wrong prefix lengths
-    if($network % (1 << (32 - $cidr)))
+    // ignore prefixes with wrong prefix lengths.
+    //
+    // Both network address and block size are converted
+    // to float to make this work on 32-bit machines.
+    if(floatval($network) % floatval(1 << (32 - $cidr)))
       continue;
     // If network is already known, but prefix lengths
     // differ, use the less specific one, as it covers
     // the range of more specific one, as well.
     if(isset($prefixes[$network]) && $prefixes[$network] <= $cidr)
       continue;
-    // Stupid PHP: this is the only way to get around
-    // signed long integers on 32-bit machines
-    if(PHP_INT_SIZE == 4)
-      $network = sprintf('%u', $network);
     // network => cidr
     $prefixes[$network] = $cidr;
   }
