@@ -86,7 +86,9 @@ function prefix_aggregator32($nonaggregated, $address_length=32)
 
   foreach($nonaggregated as $current_network_address => $cidr) {
     // Skip address blocks that fall into already aggregated range
-    if($prev_aggregated_block_broadcast_address >= $current_network_address)
+    // or range of preceeding address block
+    if(($prev_aggregated_block_broadcast_address >= $current_network_address) ||
+       ($prev_broadcast_address >= $current_network_address))
       continue;
     // Network address of the subnet immediately following this one
     $next_network_address = $current_network_address + (1 << ($address_length - $cidr));
@@ -176,7 +178,9 @@ function prefix_aggregator64($nonaggregated, $address_length=32)
 
   foreach($nonaggregated as $current_network_address => $cidr) {
     // Skip address blocks that fall into already aggregated range
-    if($prev_aggregated_block_broadcast_address >= $current_network_address)
+    // or range of preceeding address block
+    if(($prev_aggregated_block_broadcast_address >= $current_network_address) ||
+       ($prev_broadcast_address >= $current_network_address))
       continue;
     // Network address of the subnet immediately following this one
     $next_network_address = $current_network_address + (1 << ($address_length - $cidr));
