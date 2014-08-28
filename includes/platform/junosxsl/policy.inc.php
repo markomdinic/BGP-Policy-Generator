@@ -39,7 +39,7 @@ function policy_generate($template, &$junos_conf, &$include)
       continue;
 
     // Begin policy statement
-    $junos_conf[] = "<policy-statement>";
+    $junos_conf[] = "<policy-statement replace=\"replace\">";
     $junos_conf[] = "<name>".$policy_name."</name>";
 
     // Look for 'config' tags that contain

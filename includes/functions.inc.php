@@ -347,6 +347,8 @@ function update_template($autotemplate)
                 case 'inet':
                   // ... aggregate IPv4 prefixes
                   $prefixes = aggregate_ipv4($prefixes);
+                  if(empty($prefixes))
+                    continue 2;
                   break;
                 case 'inet6':
                   break;

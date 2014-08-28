@@ -85,7 +85,7 @@ function prefixlist_generate($template, &$junos_conf)
     // case no prefix list items were generated (possibly
     // due to misconfiguration).
     if(count($conf)) {
-      $junos_conf[] = "<prefix-list>";
+      $junos_conf[] = "<prefix-list replace=\"replace\">";
       $junos_conf[] = "<name>".$name."</name>";
       foreach($conf as $line)
         $junos_conf[] = $line;
