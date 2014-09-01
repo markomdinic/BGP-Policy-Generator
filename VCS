@@ -1,0 +1,100 @@
+
+On a first autopolicy update, templates directory is initialized as a GIT
+repository. From that point on, any change produced by autopolicy update
+will be recorded and tracked by GIT. Any template changes made by hand in
+the meantime will be recorded as well. At this point, if no autopolicy
+is used, no change is tracked automatically. To track manually maintained
+templates, proper 'git add', 'git commit' sequence must be performed
+manually.
+
+Version Control System tries to be as transparent as possible. From user's
+prespective, VCS shouldn't be visible at all. In normal circumstances,
+BGP Policy Generator will use GIT whenever it needs to, without user ever
+having to know anything about GIT or VCS, in general. However, users
+familiar with GIT might additionally benefit from using the full range of
+GIT commands inside 'templates' directory.
+
+VCS is controlled by just a few parameters in config.php:
+
+  $config['git']             - Full path to the GIT executable.
+
+  $config['user']            - POSIX account under which http server runs.
+                               To be able to generate historical versions
+                               of BGP policy configuration, the repository
+                               must be owned by the same account or be 
+                               world writable, which is bad. When updating
+                               autopolicies, templates dir gets chowned to
+                               this user.
+
+  $config['group']           - POSIX group under which http server runs.
+                               The rest is the same as for #config['user'].
+
+  $config['my_name']         - Full name of the commit author. Also used
+                               as the full name of the sender of notification
+                               emails.
+
+  $config['my_email']        - Sender email of the commit author. Also used
+                               as the email of the sender of notification
+                               emails.
+
+  $config['notify_email']    - Recipient(s) of notification emails sent
+                               when changes are commited. If nothing
+                               changes between update-templates.php runs,
+                               nothing will be commited, thus no email
+                               will be sent.
+
+                               It can be defined as a string or an array,
+                               if configuring multiple recipients.
+
+  $config['notify_changes']  - Enables/disables notification emails.
+                               Can be true or false.
+
+  $config['notify_files']    - Enables/disables inclusion of the list
+                               of changed files in the notification.
+                               Can be true or false.
+
+  $config['notify_detail']   - Enables/disables inclusion of the diff
+                               in the notification. Can be true or false.
+
+  $config['on_change']       - Full path or an array of full paths to
+                               executables invoked when changes are
+                               commited. Executables are invoked in
+                               the order in which they are defined 
+                               here. The names of changed files are
+                               passed to these executables as arguments,
+                               each changed file being a single argument:
+
+                                 /your/script <file1> <file2> <file3> ...
+
+                               Filenames contain the path relative to
+                               the repository's base (templates directory).
+                               So, the policy template will be passed as
+                               'policy/<file>' while the prefix list template
+                               will be passed as 'prefixlist/<file>'.
+
+To generate historical versions of device configurations from shell, script
+generate-configs.php should be called with additional parameter --before or
+--after. Specifying --before <datetime> selects the first version recorded
+before the specified date/time, while specifying --after <datetime> selects
+the first version recorded after the specified date/time:
+
+    generate-configs.php --before "24 hours ago" junosxsl policy
+
+or
+
+    generate-configs.php --after "last Monday" junosxsl policy SOMEPOLICY
+
+The same applies to web interface:
+
+    http://my.policy.net/ios/policy/before/july 1st, 2014/
+
+or
+
+    http://my.policy.net/ios/policy/after/week ago/SOMEPOLICY
+
+
+Under the hood, GIT will find the best matching commit (if any) and perform
+the checkout. This will create temporary read-only 'window into the past'
+enabling us to generate one of possibly many historical versions of target
+device's configuration. Once the generator is done, the repository is reset
+to the current state.

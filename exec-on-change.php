@@ -1,3 +1,4 @@
+#!/usr/bin/env php
 <?php
 /*
 
@@ -18,37 +19,34 @@
 
 */
 
-// Supress error messages
-error_reporting(~E_ALL);
-
-// Bail out without parameters
-if(empty($_GET) || empty($_GET['platform']) || empty($_GET['type']))
-  exit(0);
-
 // This will hold our own configuration
-$config = array('base_dir' => dirname(realpath(__FILE__)).'/..');
+$config = array('base_dir' => dirname(realpath(__FILE__)));
 
 // Load our own configuration
 include $config['base_dir']."/config.php";
 // Load common code library
 include $config['includes_dir']."/functions.inc.php";
 
-$platform = empty($_GET['platform']) ? '':$_GET['platform'];
-$type = empty($_GET['type']) ? '':$_GET['type'];
-$id = empty($_GET['id']) ? NULL:$_GET['id'];
+// If no script is defined, do nothing
+if(empty($config['on_change']))
+  exit(0);
 
-if(!empty($_GET['before']))
-  $time = '<'.strtotime($_GET['before']);
-elseif(!empty($_GET['after']))
-  $time = '>'.strtotime($_GET['after']);
-else
-  $time = NULL;
+print $config['on_change']."\n";
+// Get changed files
+$changed = vcs_changed_files();
+$args = empty($changed) ? '':' '.implode(' ', $changed);
 
-if($platform == 'template' && $type == 'update')
-  // Update autopolicies
-  update_templates($id);
-else
-  // Generate device configuration
-  generate_configs($platform, $type, $id, $time);
+// Make sure we are iterating over an array
+$on_change = is_array($config['on_change']) ?
+                $config['on_change']:array($config['on_change']);
+
+// Execute each script in order
+// in which they were defined
+foreach($on_change as $script) {
+  // If path points to an executable ...
+  if(is_executable($script))
+    // ... invoke it
+    exec($script.$args);
+}
 
 ?>

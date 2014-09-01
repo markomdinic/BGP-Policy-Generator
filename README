@@ -65,6 +65,23 @@ BGP Policy Generator provides option to select the source of prefix information.
 By default, prefixes are collected from Whois server, but that can be overriden
 by setting configuration option 'use_ris' to TRUE.
 
+VCS - Version Control System
+============================
+
+Templates are maintained in a VCS repository which keeps entire history of
+template changes thus enabling us to generate any configuration revision since
+the repository's creation. Of course, it also allows us to manually extract
+templates from any point in recorded history.
+
+VCS also provides better control of current changes. Nothing will be recorded
+in change history unless there really has been changes. On a successful commit,
+a notification email can be sent containing information in configurable level
+of detail. Also, user-configurable scripts can be invoked if VCS successfully
+recorded changes made.
+
+VCS is implemented using GIT. This means, of course, that GIT is one of this
+software's dependencies and is required for proper operation.
+
 Installation
 ============
 
@@ -107,7 +124,7 @@ considerable time to collect.
 Configuration
 =============
 
-Edit config.php. There's hardly anything you might want to change. You do,
+Edit config.php. There's just a few things you might want to change. You do,
 however, have to set 'local_as' parameter if you want to use template auto
 update.
 
@@ -129,6 +146,19 @@ To retrieve multiple specific configurations via http, open
 
   http://<hostname>/<platform>/<type>/<name1>,<name2>,<name3>,...
 
+To retrieve any previous version of entire configuration or, simply, any
+version that was current at the specified date and time via http, open
+
+  http://<hostname>/<platform>/<type>/<when>/<datetime>
+
+where <when> can be 'before' or 'after' and <datetime> can be any date/time
+string that can be parsed by strtotime(), which provides quite the flexibility.
+
+To retrieve any previous version of a specific configuration or multiple specific
+configurations via http, open
+
+  http://<hostname>/<platform>/<type>/<when>/<datetime>/<name1>,<name2>,<name3>,...
+
 To update autopolicies via http, open
 
   http://<hostname>/template/update
@@ -143,15 +173,28 @@ To update multiple specific autopolicies via http, open
 
 To retrieve the entire configuration from shell, invoke
 
-  <installdir>/generate-configs.php <type> <platform>
+  <installdir>/generate-configs.php <platform> <type>
 
 To retrieve specific configuration from shell, invoke
 
-  <installdir>/generate-configs.php <type> <platform> <name>
+  <installdir>/generate-configs.php <platform> <type> <name>
 
 To retrieve multiple specific configurations from shell, invoke
 
-  <installdir>/generate-configs.php <type> <platform> <name1>,<name2>,<name3>,...
+  <installdir>/generate-configs.php <platform> <type> <name1>,<name2>,<name3>,...
+
+To retrieve any previous version of entire configuration or, simply, any version
+that was current at the specified date and time from shell, invoke
+
+  <installdir>/generate-configs.php --before|--after <datetime> <platform> <type>
+
+where <datetime> can be any date/time string that can be parsed by strtotime().
+Make sure to put <datetime> string inside quotes if it contains spaces.
+
+To retrieve any previous version of a specific configuration or multiple specific
+configurations from shell, invoke
+
+  <installdir>/generate-configs.php --before|--after <datetime> <platform> <type> <name1>,<name2>,<name3>,...
 
 To update autopolicies from shell, invoke
 

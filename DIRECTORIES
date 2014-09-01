@@ -8,6 +8,9 @@
                                       autopolicy generator puts generated policy templates.
 <install_dir/templates/prefixlist   - Where you should put your prefix list templates and where
                                       autopolicy generator puts generated prefix list templates.
+<install_dir/templates/.git         - Where VCS keeps it's history. To reset the repository and
+                                      trash the change history, simply delete this directory and
+                                      everything in it.
 
 <install_dir>/includes              - Where most of the code is.
 <install_dir>/includes/platform     - Where platform-specific code resides. Each platform keeps

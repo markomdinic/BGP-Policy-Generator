@@ -9,7 +9,9 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_URI} !\.(js|ico|txt|gif|jpg|png|css|php|xsl|xml|slax)
 RewriteCond %{REQUEST_URI} !=/server-status
-RewriteRule ^([^\/]+)\/([^\/]+)\/?$ index.php?platform=$1&type=$2
+RewriteRule ^([^\/]+)\/([^\/]+)\/([^\/]+)\/([^\/]+)\/([^\/]+)\/?$ index.php?platform=$1&type=$2&$3=$4&id=$5
+RewriteRule ^([^\/]+)\/([^\/]+)\/([^\/]+)\/([^\/]+)\/?$ index.php?platform=$1&type=$2&$3=$4
 RewriteRule ^([^\/]+)\/([^\/]+)\/([^\/]+)\/?$ index.php?platform=$1&type=$2&id=$3
+RewriteRule ^([^\/]+)\/([^\/]+)\/?$ index.php?platform=$1&type=$2
 
 AcceptPathInfo On

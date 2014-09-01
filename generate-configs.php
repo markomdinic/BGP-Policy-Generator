@@ -19,10 +19,64 @@
 
 */
 
-if(count($argv) < 3 || count($argv) > 4) {
-  echo("Usage: ".basename(realpath(__FILE__))." <platform> <config_type> [template_id1,template_id2,...]\n");
+function usage()
+{
+  echo("Usage: ".basename(realpath(__FILE__))." [--help|-h] [--before|-b <date>] [--after|-a <date>] <platform> <config_type> [template_id1,template_id2,...]\n");
   exit(255);
 }
+
+// Skip script name
+array_shift($argv);
+
+// Get optional parameters
+while(count($argv) > 0) {
+  $arg = array_shift($argv);
+  if(empty($arg))
+    break;
+  switch($arg) {
+    case '-h':
+    case '--help':
+      usage();
+      break;
+    case '-b':
+    case '--before':
+      // Time argument already defined
+      if(!empty($time))
+        usage();
+      // Get time argument
+      $arg = array_shift($argv);
+      // Time argument is missing
+      if(empty($arg))
+        usage();
+      // Format time parameter
+      $time = '<'.strtotime($arg);
+      break;
+    case '-a':
+    case '--after':
+      // Time argument already defined
+      if(!empty($time))
+        usage();
+      // Get time argument
+      $arg = array_shift($argv);
+      // Time argument is missing
+      if(empty($arg))
+        usage();
+      // Format time parameter
+      $time = '>'.strtotime($arg);
+      break;
+    default:
+      $args[] = $arg;
+      break;
+  }
+}
+
+// No less than 2 and no more than 3 arguments
+if(empty($args) || count($args) < 2 || count($args) > 3)
+  usage();
+
+$platform = empty($args[0]) ? NULL:$args[0];
+$type = empty($args[1]) ? NULL:$args[1];
+$id = empty($args[2]) ? NULL:$args[2];
 
 // This will hold our own configuration
 $config = array('base_dir' => dirname(realpath(__FILE__)));
@@ -32,13 +86,7 @@ include $config['base_dir']."/config.php";
 // Load common code library
 include $config['includes_dir']."/functions.inc.php";
 
-if(!empty($argv[3])) {
-  $template_ids = explode(',', $argv[3]);
-  if(!empty($template_ids))
-    // Generate specific device configuration
-    generate_config_by_id($argv[1], $argv[2], $template_ids);
-} else
-  // Generate complete device configuration
-  generate_full_config($argv[1], $argv[2]);
+// Generate device configuration
+generate_configs($platform, $type, $id, $time);
 
 ?>

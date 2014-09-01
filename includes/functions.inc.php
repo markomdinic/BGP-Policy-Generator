@@ -20,6 +20,7 @@
 
 include_once $config['includes_dir'].'/tools.inc.php';
 include_once $config['includes_dir'].'/whois.inc.php';
+include_once $config['includes_dir'].'/vcs.inc.php';
 
 // **************************** TEMPLATE FUNCTIONS ****************************
 
@@ -141,7 +142,7 @@ function find_template_by_attr($type, $tag, $attr, $attrval)
     return (count($attrvals) == 1) ? $results[0]:$results;
 }
 
-function update_template($autotemplate)
+function update_template($autotemplate, &$statusmsg="")
 {
   global $config;
 
@@ -182,12 +183,12 @@ function update_template($autotemplate)
     $family = $policy->getAttribute('family');
     switch($family) {
       case 'inet':
-        echo("Fetching af inet prefixes announced by AS".$peer_as." to AS".$local_as." ...\n");
+        status_message("Fetching af inet prefixes announced by AS".$peer_as." to AS".$local_as." ...\n", $statusmsg);
         // Get prefixes announced by <peer-as> to <local-as>
         $announced = get_announced_ipv4_prefixes('AS'.$peer_as, 'AS'.$local_as);
         break;
       case 'inet6':
-        echo("Fetching af inet6 prefixes announced by AS".$peer_as." to AS".$local_as." ...\n");
+        status_message("Fetching af inet6 prefixes announced by AS".$peer_as." to AS".$local_as." ...\n", $statusmsg);
         // Get prefixes announced by <peer-as> to <local-as>
         $announced = get_announced_ipv6_prefixes('AS'.$peer_as, 'AS'.$local_as);
         break;
@@ -199,11 +200,11 @@ function update_template($autotemplate)
     // No point going any further
     // if prefixes are missing
     if(empty($announced)) {
-      echo("Got no af ".$family." prefixes from AS".$peer_as.".\n");
+      status_message("Got no af ".$family." prefixes from AS".$peer_as.".\n", $statusmsg);
       return;
     }
 
-    echo("AS".$peer_as." is announcing (af ".$family.") ".count(array_keys($announced))." autonomous systems.\n");
+    status_message("AS".$peer_as." is announcing (af ".$family.") ".count(array_keys($announced))." autonomous systems.\n", $statusmsg);
 
     // This array will receive terms
     // built as strings in XML format
@@ -324,6 +325,9 @@ function update_template($autotemplate)
           // string to prepend to auto-generated prefix list name.
           $name_prepend = empty($p->nodeValue) ? '':$p->nodeValue.'-';
 
+          // Sort prefixes by ASn
+          ksort($announced);
+
           // Loop through all collected prefixes
           foreach($announced as $origin_as => $prefixes) {
 
@@ -357,6 +361,9 @@ function update_template($autotemplate)
                   continue 6;
               }
             }
+
+            // Sort prefixes
+            sort($prefixes);
 
             // Add prefixes to the prefix list
             foreach($prefixes as $prefix) {
@@ -398,7 +405,7 @@ function update_template($autotemplate)
             $num = $doc->save($config['templates_dir'].'/prefixlist/'.$prefix_list_name);
             if($num === FALSE) {
               // Abort at the first sign of trouble
-              echo("Aborting: failed to write prefix list file ".$prefix_list_name.".\n");
+              status_message("Aborting: failed to write prefix list file ".$prefix_list_name.".\n", $statusmsg);
               return;
             }
 
@@ -532,7 +539,7 @@ function update_template($autotemplate)
   return;
 }
 
-function update_template_by_id($id)
+function update_template_by_id($id, &$log='')
 {
   global $config;
 
@@ -547,34 +554,35 @@ function update_template_by_id($id)
   $ids = is_array($id) ? $id:array($id);
 
   foreach($ids as $id) {
-
-    echo("Updating autopolicy template ".$id." ...\n");
+    status_message("Updating autopolicy template ".$id." ...\n", $log);
 
     // Load specific autopolicy template
     $autotemplate = load_template($config['templates_dir'].'/autopolicy/'.$id);
     if(!isset($autotemplate)) {
-      echo("Auto-policy template ".$id." not found.\n");
-      return false;
+      status_message("Autopolicy template ".$id." not found.\n", $log);
+      continue;
     }
 
     // Generate config templates from autopolicy template
-    $template = update_template($autotemplate);
-    if(!isset($template))
-      return false;
+    $template = update_template($autotemplate, $log);
+    if(!isset($template)) {
+      status_message("Autopolicy ".$id." update failed.\n", $log);
+      continue;
+    }
     // Make XML output properly formatted
     $template->formatOutput = true;
     // Save updated template to the policy directory
     $template->save($config['templates_dir'].'/policy/'.$id);
 
-    echo("Autopolicy template ".$id." successfully updated.\n");
+    status_message("Autopolicy ".$id." successfully updated.\n", $log);
   }
 
-  echo("Done.\n");
+  status_message("Done.\n", $log);
 
   return true;
 }
 
-function update_all_templates()
+function update_all_templates(&$log='')
 {
   global $config;
 
@@ -584,16 +592,16 @@ function update_all_templates()
   // Load all autopolicy templates
   $autotemplates = load_templates($config['templates_dir'].'/autopolicy');
   if(empty($autotemplates)) {
-    echo("No auto-policy templates defined.\n");
+    echo("No autopolicy templates defined.\n");
     return false;
   }
 
-  echo("Updating all autopolicy templates ...\n");
+  status_message("Updating all autopolicy templates ...\n", $log);
 
   // Process all autopolicy template files
   foreach($autotemplates as $filename => $autotemplate) {
     // Update template from autopolicy template
-    $template = update_template($autotemplate);
+    $template = update_template($autotemplate, $log);
     // If template update failed ...
     if(!isset($template))
       // ... move on to the next template
@@ -604,9 +612,38 @@ function update_all_templates()
     $template->save($config['templates_dir'].'/policy/'.$filename);
   }
 
-  echo("Done.\n");
+  status_message("Done.\n", $log);
 
   return true;
+}
+
+function update_templates($id=NULL)
+{
+  global $config;
+
+  // Split comma-separated list of template IDs
+  $ids = empty($id) ? array():explode(',', $id);
+
+  // Initialize GIT repository (if neccessary)
+  vcs_init_repository($config['templates_dir']);
+
+  $log = '';
+
+  // Update autopolicies
+  $res = empty($ids) ?
+            update_all_templates($log):
+            update_template_by_id($ids, $log);
+
+  // If update was successful ..
+  if($res)
+    // ... commit changes in the repository
+    vcs_commit($config['templates_dir'], $log);
+  // Otherwise ...
+  else
+    // ... reset to last good commit
+    vcs_reset();
+
+  return $res;
 }
 
 // ************************** PREFIX-LIST FUNCTIONS ***************************
@@ -650,7 +687,12 @@ function print_generated_config(&$device_conf, $config_type)
     return;
 
   // Serialize configuration
-  $config = implode("\n", $device_conf)."\n";
+  $config = "";
+  // We could use the implode() here, but that might
+  // hit the PHP allowed memory limit, so we rather
+  // concatenate config lines by hand
+  foreach($device_conf as $line)
+    $config .= $line."\n";
   // Get content type if generator defines it
   $func = $config_type.'_content_type';
   if(is_callable($func))
@@ -801,6 +843,7 @@ function generate_full_config($platform, $type)
   if(!is_file($include_file))
     return false;
 
+
   // Include generator code
   include_once $include_file;
 
@@ -823,9 +866,10 @@ function generate_full_config($platform, $type)
     // Generate configuration from the template
     $generate = $type.'_generate';
     // Invoke type-specific generator
-    if($generate($template, $device_conf, $include) === FALSE)
+    if($generate($template, $device_conf, $include) === FALSE) {
       // Generators return explicit FALSE on error
       return false;
+    }
   }
 
   // Additional config requested by processed templates,
@@ -850,6 +894,36 @@ function generate_full_config($platform, $type)
 
   // Success
   return true;
+}
+
+function generate_configs($platform, $type, $list=NULL, $time=NULL)
+{
+  global $config;
+
+  // Split comma-separated list of template IDs
+  $ids = empty($list) ? array():explode(',', $list);
+
+  // Initialize GIT repository (if neccessary)
+  vcs_init_repository($config['templates_dir']);
+
+  // If time is defined...
+  if(!empty($time)) {
+    // ... checkout commit closest to the specified time
+    if(!vcs_checkout($time))
+      return false;
+  }
+
+  // Generate configuration in requested format
+  $res = empty($ids) ?
+            generate_full_config($platform, $type):
+            generate_config_by_id($platform, $type, $ids);
+
+  // If time was defined...
+  if(!empty($time))
+    // .. reset repository back to master
+    vcs_checkout();
+
+  return $res;
 }
 
 // **************************** GENERIC FUNCTIONS *****************************

@@ -19,10 +19,36 @@
 
 */
 
-if(count($argv) > 2) {
-  echo("Usage: ".basename(realpath(__FILE__))." [autopolicy_name]\n");
+function usage()
+{
+  echo("Usage: ".basename(realpath(__FILE__))." [--help|-h] [autopolicy_name]\n");
   exit(255);
 }
+
+// Skip script name
+array_shift($argv);
+
+// Get optional parameters
+while(count($argv) > 0) {
+  $arg = array_shift($argv);
+  if(empty($arg))
+    break;
+  switch($arg) {
+    case '-h':
+    case '--help':
+      usage();
+      break;
+    default:
+      $args[] = $arg;
+      break;
+  }
+}
+
+// There has to be no more than 1 argument
+if(!empty($args) && count($args) > 1)
+  usage();
+
+$id = empty($args[0]) ? NULL:$args[0];
 
 // This will hold our own configuration
 $config = array('base_dir' => dirname(realpath(__FILE__)));
@@ -32,13 +58,7 @@ include $config['base_dir']."/config.php";
 // Load common code library
 include $config['includes_dir']."/functions.inc.php";
 
-if(!empty($argv[1])) {
-  $template_ids = explode(',', $argv[1]);
-  if(!empty($template_ids))
-    // Update specific autopolicy from RIPE
-    update_template_by_id($template_ids);
-} else
-  // Update all autopolicies from RIPE
-  update_all_templates();
+// Update autopolicies
+update_templates($id);
 
 ?>

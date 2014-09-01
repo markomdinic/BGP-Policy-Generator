@@ -18,6 +18,20 @@
 
 */
 
+function status_message($msg, &$log)
+{
+  if(empty($msg))
+    return '';
+
+  // Show status message
+  echo($msg);
+  // Accumulate messages in the log
+  if(isset($log))
+    $log .= $msg;
+
+  return $msg;
+}
+
 function is_asn($asn)
 {
   if(preg_match('/^(?:AS)?(\d+)$/i', $asn, $m))
