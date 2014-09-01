@@ -30,6 +30,9 @@ $config['on_change'] = array();
 $config['user'] = "httpd";
 $config['group'] = "httpd";
 
+// Default time zone
+$config['timezone'] = "UTC";
+
 // Directories
 $config['includes_dir'] = $config['base_dir']."/includes";
 $config['templates_dir'] = $config['base_dir']."/templates";

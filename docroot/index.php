@@ -33,6 +33,9 @@ include $config['base_dir']."/config.php";
 // Load common code library
 include $config['includes_dir']."/functions.inc.php";
 
+// Set the default time zone
+date_default_timezone_set(empty($config['timezone']) ? 'UTC':$config['timezone']);
+
 $platform = empty($_GET['platform']) ? '':$_GET['platform'];
 $type = empty($_GET['type']) ? '':$_GET['type'];
 $id = empty($_GET['id']) ? NULL:$_GET['id'];

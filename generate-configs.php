@@ -25,6 +25,17 @@ function usage()
   exit(255);
 }
 
+// This will hold our own configuration
+$config = array('base_dir' => dirname(realpath(__FILE__)));
+
+// Load our own configuration
+include $config['base_dir']."/config.php";
+// Load common code library
+include $config['includes_dir']."/functions.inc.php";
+
+// Set the default time zone
+date_default_timezone_set(empty($config['timezone']) ? 'UTC':$config['timezone']);
+
 // Skip script name
 array_shift($argv);
 
@@ -77,14 +88,6 @@ if(empty($args) || count($args) < 2 || count($args) > 3)
 $platform = empty($args[0]) ? NULL:$args[0];
 $type = empty($args[1]) ? NULL:$args[1];
 $id = empty($args[2]) ? NULL:$args[2];
-
-// This will hold our own configuration
-$config = array('base_dir' => dirname(realpath(__FILE__)));
-
-// Load our own configuration
-include $config['base_dir']."/config.php";
-// Load common code library
-include $config['includes_dir']."/functions.inc.php";
 
 // Generate device configuration
 generate_configs($platform, $type, $id, $time);

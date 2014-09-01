@@ -25,6 +25,17 @@ function usage()
   exit(255);
 }
 
+// This will hold our own configuration
+$config = array('base_dir' => dirname(realpath(__FILE__)));
+
+// Load our own configuration
+include $config['base_dir']."/config.php";
+// Load common code library
+include $config['includes_dir']."/functions.inc.php";
+
+// Set the default time zone
+date_default_timezone_set(empty($config['timezone']) ? 'UTC':$config['timezone']);
+
 // Skip script name
 array_shift($argv);
 
@@ -50,13 +61,6 @@ if(!empty($args) && count($args) > 1)
 
 $id = empty($args[0]) ? NULL:$args[0];
 
-// This will hold our own configuration
-$config = array('base_dir' => dirname(realpath(__FILE__)));
-
-// Load our own configuration
-include $config['base_dir']."/config.php";
-// Load common code library
-include $config['includes_dir']."/functions.inc.php";
 
 // Update autopolicies
 update_templates($id);
