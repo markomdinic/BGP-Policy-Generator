@@ -23,7 +23,7 @@ function policy_generate($template, &$ios_conf, &$include)
   foreach($template->getElementsByTagName('policy') as $policy) {
     // Route-map name is mandatory
     $policy_name = $policy->getAttribute('id');
-    if(empty($policy_name))
+    if(!is_name($policy_name))
       continue;
 
     // Look for 'config' tags that contain

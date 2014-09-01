@@ -35,7 +35,7 @@ function prefixlist_generate($template, &$junos_conf)
   foreach($template->getElementsByTagName('prefix-list') as $prefix_list) {
     // Prefix list name is mandatory
     $name = $prefix_list->getAttribute('id');
-    if(empty($name))
+    if(!is_name($name))
       continue;
     // Address family is mandatory
     switch($prefix_list->getAttribute('family')) {

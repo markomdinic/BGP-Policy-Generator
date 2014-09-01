@@ -23,7 +23,7 @@ function policy_generate($template, &$junos_conf, &$include)
   foreach($template->getElementsByTagName('policy') as $policy) {
     // Policy name is mandatory
     $policy_name = $policy->getAttribute('id');
-    if(empty($policy_name))
+    if(!is_name($policy_name))
       continue;
 
     // Begin policy statement
@@ -39,7 +39,7 @@ function policy_generate($template, &$junos_conf, &$include)
 
       // Term name is mandatory
       $term_name = $term->getAttribute('id');
-      if(empty($term_name))
+      if(!is_name($term_name))
         continue;
 
       $depth = 1;

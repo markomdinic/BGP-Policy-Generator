@@ -32,6 +32,14 @@ function status_message($msg, &$log)
   return $msg;
 }
 
+function is_name($name)
+{
+  if(empty($name))
+    return false;
+
+  return preg_match('/^[a-zA-Z0-9\-\.\_]+$/', $name);
+}
+
 function is_asn($asn)
 {
   if(preg_match('/^(?:AS)?(\d+)$/i', $asn, $m))

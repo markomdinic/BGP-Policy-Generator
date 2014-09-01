@@ -166,9 +166,9 @@ function update_template($autotemplate, &$statusmsg="")
 
     // Policy ID (name) is mandatory
     $policy_id = $policy->getAttribute('id');
-    // If policy name is missing
+    // If policy name is missing or invalid,
     // skip to the next policy
-    if(empty($policy_id))
+    if(!is_name($policy_id))
       continue;
 
     // Peer's AS number is mandatory
@@ -215,9 +215,9 @@ function update_template($autotemplate, &$statusmsg="")
 
       // Term ID (name) is mandatory
       $term_id = $term->getAttribute('id');
-      // If term name is missing,
+      // If term name is missing or invalid,
       // skip to the next policy
-      if(empty($term_id))
+      if(!is_name($term_id))
         continue 2;
 
       // Term action is mandatory
@@ -323,7 +323,7 @@ function update_template($autotemplate, &$statusmsg="")
 
           // Tag's value is optional and, if defined, represents
           // string to prepend to auto-generated prefix list name.
-          $name_prepend = empty($p->nodeValue) ? '':$p->nodeValue.'-';
+          $name_prepend = is_name($p->nodeValue) ? ($p->nodeValue).'-':'';
 
           // Sort prefixes by ASn
           ksort($announced);
