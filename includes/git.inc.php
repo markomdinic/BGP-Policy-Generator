@@ -33,7 +33,7 @@ function git()
     return false;
 
   // Run git command
-  exec($config['git']." ".implode(' ', $args)." 2>&1", $output, $retval);
+  exec($config['git']." ".implode(' ', $args)." 2>/dev/null", $output, $retval);
   if($retval != 0)
     return false;
 
