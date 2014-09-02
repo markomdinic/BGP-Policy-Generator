@@ -176,7 +176,7 @@ function vcs_checkout($timestamp=NULL)
       }
       // Checkout selected commit
       if(!empty($commit))
-        $res = git_checkout($commits[0]);
+        $res = git_checkout($commit);
     }
   } else
     $res = git_checkout('master');
