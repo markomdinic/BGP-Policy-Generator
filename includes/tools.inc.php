@@ -18,6 +18,38 @@
 
 */
 
+function drop_privileges()
+{
+  global $config;
+  // Must be running as root to do this
+  if(posix_geteuid() != 0)
+    return false;
+  // If user is defined ...
+  if(!empty($config['user'])) {
+    $user = posix_getpwnam($config['user']);
+    if($user === FALSE)
+      return false;
+  }
+  // If group is defined ...
+  if(!empty($config['group'])) {
+    $group = posix_getgrnam($config['group']);
+    if($group === FALSE)
+      return false;
+  }
+  // If group data is valid ...
+  if(is_array($group)) {
+    // ... drop privileges to the defined group
+    posix_setgid($group['gid']);
+    posix_setegid($group['gid']);
+  }
+  // If user data is valid ...
+  if(is_array($user)) {
+    // ... drop privileges to the defined user
+    posix_setuid($user['uid']);
+    posix_seteuid($user['uid']);
+  }
+}
+
 function status_message($msg, &$log)
 {
   if(empty($msg))

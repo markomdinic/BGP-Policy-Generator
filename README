@@ -115,20 +115,30 @@ Then you can point your devices/scripts to
 
 and that's it.
 
-In either case, if you wish to perform regular autopolicy updates, you need to
-schedule <installdir>/update-templates.php triggers via cron. How often is
-completely up to you. Bear in mind, though, that some peers might export
+In either case, if you wish to perform regular autopolicy updates, you need
+to schedule <installdir>/update-templates.php triggers via cron. How often
+is completely up to you. Bear in mind, though, that some peers might export
 A LOT of ASNs which results in even more announced routes, which might take
 considerable time to collect.
+
+Also, if you cloned this software from a git repository, make sure to delete
+.git directory to prevent it from interfering with our VCS.
+
+At last, chown templates dir and everything in it to the user/group http
+server is running as.
 
 Configuration
 =============
 
-Edit config.php. There's just a few things you might want to change. You do,
-however, have to set 'local_as' parameter if you want to use template auto
-update.
+Edit config.php. There's just a few things you might want to change
+right away:
 
-That's it.
+ - Set 'local_as' parameter if you want to use autopolicy update.
+ - Set the user/group to the user/group http daemon is running as.
+ - Set the full path to the git executable.
+ - Set timezone to prevent PHP complaints.
+
+That's about it. The rest depends on your needs.
 
 Usage
 =====

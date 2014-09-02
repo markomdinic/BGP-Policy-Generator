@@ -140,24 +140,6 @@ function vcs_commit($targets, $message)
            $message,
            "From: ".$author." <".$email.">");
     }
-    // 2. Set the owner of templates dir to the httpd user
-    $path = isset($config['templates_dir']) ? $config['templates_dir']:NULL;
-    if(isset($path)) {
-      $user = isset($config['user']) ? $config['user']:NULL;
-      $group = isset($config['group']) ? $config['group']:NULL;
-      // Chown templates dir
-      if(!empty($user) && posix_getpwnam($user) !== FALSE) {
-        exec('chown -R '.$user.' '.$path, $o, $r);
-        if($r == 0)
-          exec('chmod -R u+rw '.$path);
-      }
-      // Chgrp template dir
-      if(!empty($group) && posix_getgrnam($group) !== FALSE) {
-        exec('chgrp -R '.$group.' '.$path, $o, $r);
-        if($r == 0)
-          exec('chmod -R g+rw '.$path);
-      }
-    }
   }
 
   // Change back to prev dir
@@ -177,12 +159,23 @@ function vcs_checkout($timestamp=NULL)
     $res = false;
     if(preg_match('/^([<>])?(\d+)$/', $timestamp, $t)) {
       // List previous commits
-      if(empty($t[1]) || $t[1] == '<')
+      if(empty($t[1]) || $t[1] == '<') {
+        // Get commits before specified date/time
         $commits = git_list_before($t[2]);
-      elseif($t[1] == '>')
+        if(!empty($commits))
+          // Commit immediately before
+          // specified date/time
+          $commit = array_shift($commits);
+      } elseif($t[1] == '>') {
+        // Get commits after specified date/time
         $commits = git_list_after($t[2]);
-      // Checkout first listed commit
-      if(!empty($commits))
+        if(!empty($commits))
+          // Commit immediately after
+          // specified date/time
+          $commit = array_pop($commits);
+      }
+      // Checkout selected commit
+      if(!empty($commit))
         $res = git_checkout($commits[0]);
     }
   } else

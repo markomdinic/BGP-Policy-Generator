@@ -621,6 +621,10 @@ function update_templates($id=NULL)
 {
   global $config;
 
+  // Drop root privileges and change
+  // to http daemon's user/group
+  drop_privileges();
+
   // Split comma-separated list of template IDs
   $ids = empty($id) ? array():explode(',', $id);
 
@@ -843,7 +847,6 @@ function generate_full_config($platform, $type)
   if(!is_file($include_file))
     return false;
 
-
   // Include generator code
   include_once $include_file;
 
@@ -899,6 +902,10 @@ function generate_full_config($platform, $type)
 function generate_configs($platform, $type, $list=NULL, $time=NULL)
 {
   global $config;
+
+  // Drop root privileges and change
+  // to http daemon's user/group
+  drop_privileges();
 
   // Split comma-separated list of template IDs
   $ids = empty($list) ? array():explode(',', $list);

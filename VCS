@@ -98,3 +98,24 @@ the checkout. This will create temporary read-only 'window into the past'
 enabling us to generate one of possibly many historical versions of target
 device's configuration. Once the generator is done, the repository is reset
 to the current state.
+
+When device is pulling configuration via http, it most likely doesn't know
+if changes have been made since the previous run. Therefore, it will always
+pull and apply the configuration whether it is the same or not. To go around
+this, URL should include 'after' parameter. Requesting configuration version
+commited after the specified date/time will produce output only if there
+really was at least one commited change since. Otherwise, output will be
+blank and no reconfiguration will occur. For example, if you are updating
+autopolicies at 05:00 and pull configuration at 06:00, your generator URL
+might look something like this:
+
+    http://my.policy.net/junosxsl/policy/after/2 hours ago/YOURPOLICY
+
+You are requesting any configuration since 04:00 and there is only one
+potential configuration at 05:00. If autopolicy update at 05:00 pulled in
+some changes and successfully commited them, opening this URL will produce
+new device configuration. If no changes were commited at 05:00, nothing
+will be returned.
+
+Therefore, 'after' can be used to generate configurations conditionally,
+while 'before' can be used as a way to perform configuration rollback.
