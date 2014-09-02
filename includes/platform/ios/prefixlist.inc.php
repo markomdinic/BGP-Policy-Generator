@@ -41,6 +41,8 @@ function prefixlist_generate($template, &$ios_conf)
         continue 2;
     }
 
+    $conf = array();
+
     // Look for 'config' tag that contains 
     // free-form platform-specific config
     $ff = get_freeform_config($prefix_list, 'ios', 'prepend');

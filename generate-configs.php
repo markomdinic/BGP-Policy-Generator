@@ -36,9 +36,10 @@ include $config['includes_dir']."/functions.inc.php";
 // Set the default time zone
 date_default_timezone_set(empty($config['timezone']) ? 'UTC':$config['timezone']);
 
+$time = NULL;
+
 // Skip script name
 array_shift($argv);
-
 // Get optional parameters
 while(count($argv) > 0) {
   $arg = array_shift($argv);
