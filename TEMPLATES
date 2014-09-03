@@ -194,7 +194,16 @@ Route property transformation operations are defined by the following tags:
 
  <med>                  - Sets route's Multi-Exit Discriminator.
                         - Tag's value specifies the MED value directly.
-                        - Takes no attributes.
+                        - Takes 1 optional attribute, not applicable on all
+                          platforms:
+
+                           'action' - Operator performed on route's MED attribute:
+                                      'set'      sets Multi-Exit Discriminator
+                                                 to the specified value,
+                                      'add'      adds specified value to route's
+                                                 Multi-Exit Discriminator,
+                                      'subtract' subtracts specified value from
+                                                 route's Multi-Exit Discriminator.
 
  <weight>               - Sets vendor-specific non-transitive metric.
                         - Maps to (very) different things on different platforms.

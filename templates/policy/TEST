@@ -2,14 +2,17 @@
 <policies>
     <policy id="TEST">
 	<config platform="ios" action="prepend">! IOS_POLICY_PREPEND</config>
+	<config platform="iosxr" action="prepend"># IOS_XR_POLICY_PREPEND</config>
 	<config platform="junos" action="prepend">    /* JUNOS_POLICY_PREPEND */</config>
 	<config platform="junosxsl" action="prepend"><![CDATA[<!-- JUNOS_POLICY_PREPEND -->]]></config>
 	<term action="permit" id="own-prefixes">
 	    <config platform="ios" action="prepend">! IOS_TERM_PREPEND</config>
+	    <config platform="iosxr" action="prepend"># IOS_XR_TERM_PREPEND</config>
 	    <config platform="junos" action="prepend">        /* JUNOS_TERM_PREPEND */</config>
 	    <config platform="junosxsl" action="prepend"><![CDATA[<!-- JUNOS_TERM_PREPEND -->]]></config>
 	    <match>
 		<config platform="ios" action="prepend">! IOS_MATCH_PREPEND</config>
+		<config platform="iosxr" action="prepend"># IOS_XR_MATCH_PREPEND</config>
 		<config platform="junos" action="prepend">            /* JUNOS_MATCH_PREPEND */</config>
 		<config platform="junosxsl" action="prepend"><![CDATA[<!-- JUNOS_MATCH_PREPEND -->]]></config>
 		<family>inet</family>
@@ -19,11 +22,13 @@
 		<community>community1</community>
 		<neighbor id="GW1">10.10.10.1</neighbor>
 		<config platform="ios" action="append">! IOS_MATCH_APPEND</config>
+		<config platform="iosxr" action="append"># IOS_XR_MATCH_APPEND</config>
 		<config platform="junos" action="append">            /* JUNOS_MATCH_APPEND */</config>
 		<config platform="junosxsl" action="append"><![CDATA[<!-- JUNOS_MATCH_APPEND -->]]></config>
 	    </match>
 	    <set>
 		<config platform="ios" action="prepend">! IOS_SET_PREPEND</config>
+		<config platform="iosxr" action="prepend"># IOS_XR_SET_PREPEND</config>
 		<config platform="junos" action="prepend">            /* JUNOS_SET_PREPEND */</config>
 		<config platform="junosxsl" action="prepend"><![CDATA[<!-- JUNOS_SET_PREPEND -->]]></config>
 		<local-preference action="add">300</local-preference>
@@ -36,10 +41,12 @@
 		<next-hop>10.0.0.1</next-hop>
 		<origin>igp</origin>
 		<config platform="ios" action="append">! IOS_SET_APPEND</config>
+		<config platform="iosxr" action="append"># IOS_XR_SET_APPEND</config>
 		<config platform="junos" action="append">            /* JUNOS_SET_APPEND */</config>
 		<config platform="junosxsl" action="append"><![CDATA[<!-- JUNOS_SET_APPEND -->]]></config>
 	    </set>
 	    <config platform="ios" action="append">! IOS_TERM_APPEND</config>
+	    <config platform="iosxr" action="append"># IOS_XR_TERM_APPEND</config>
 	    <config platform="junos" action="append">        /* JUNOS_TERM_APPEND */</config>
 	    <config platform="junosxsl" action="append"><![CDATA[<!-- JUNOS_TERM_APPEND -->]]></config>
 	</term>
@@ -67,7 +74,10 @@
 		<origin>igp</origin>
 	    </set>
 	</term>
+	<term action="deny" id="block-the-rest">
+	</term>
 	<config platform="ios" action="append">! IOS_POLICY_APPEND</config>
+	<config platform="iosxr" action="append"># IOS_XR_POLICY_APPEND</config>
 	<config platform="junos" action="append">    /* JUNOS_POLICY_APPEND */</config>
 	<config platform="junosxsl" action="append"><![CDATA[<!-- JUNOS_POLICY_APPEND -->]]></config>
     </policy>

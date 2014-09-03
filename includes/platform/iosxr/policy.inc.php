@@ -18,7 +18,7 @@
 
 */
 
-function policy_generate($template, &$junos_conf, &$include)
+function policy_generate($template, &$iosxr_conf, &$include)
 {
   foreach($template->getElementsByTagName('policy') as $policy) {
     // Policy name is mandatory
@@ -26,146 +26,130 @@ function policy_generate($template, &$junos_conf, &$include)
     if(!is_name($policy_name))
       continue;
 
-    // Begin policy statement
-    $junos_conf[] = "policy-statement ".$policy_name." {";
+    // Begin policy
+    $iosxr_conf[] = "route-policy ".$policy_name;
 
     // Look for 'config' tags that contain
     // free-form, device-specific config
-    $ff = get_freeform_config($policy, 'junos', 'prepend');
+    $ff = get_freeform_config($policy, 'iosxr', 'prepend');
     if(!empty($ff))
-      $junos_conf[] = $ff;
+      $iosxr_conf[] = $ff;
+
+    $if = "if";
 
     foreach($policy->getElementsByTagName('term') as $term) {
 
-      // Term name is mandatory
-      $term_name = $term->getAttribute('id');
-      if(!is_name($term_name))
-        continue;
-
-      $depth = 1;
-      $pad = str_pad('', 4*$depth++);
-
-      // Begin term
-      $junos_conf[] = $pad."term ".$term_name." {";
-      $pad = str_pad('', 4*$depth++);
-
       // Look for 'config' tags that contain
       // free-form, device-specific config
-      $ff = get_freeform_config($term, 'junos', 'prepend');
+      $ff = get_freeform_config($term, 'iosxr', 'prepend');
       if(!empty($ff))
-        $junos_conf[] = $ff;
+        $iosxr_conf[] = $ff;
 
       // Match conditions
       $match_conf = array();
-      $pad = str_pad('', 4*$depth);
 
       foreach($term->getElementsByTagName('match') as $match) {
 
         // Look for 'config' tags that contain
         // free-form, device-specific config
-        $ff = get_freeform_config($match, 'junos', 'prepend');
+        $ff = get_freeform_config($match, 'iosxr', 'prepend');
         if(!empty($ff))
           $match_conf[] = $ff;
 
-        // Family
-        foreach($match->getElementsByTagName('family') as $f) {
-          // Family name is mandatory
-          switch($f->nodeValue) {
-            case 'inet':
-            case 'ipv4':
-              $match_conf[] = $pad."family inet;";
-              break;
-            case 'inet6':
-            case 'ipv6':
-              $match_conf[] = $pad."family inet6;";
-              break;
-          }
-          break;
-        }
         // Protocol
         $protocols = array();
         foreach($match->getElementsByTagName('protocol') as $p) {
-          $proto = $p->nodeValue;
-          switch($proto) {
+          // Protocol name is mandatory
+          $protocol_name = $p->nodeValue;
+          // Routing process ID is mandatory for dynamic protocols
+          $id = $p->getAttribute('id');
+          // Template protocol names => IOS XR protocol names
+          switch($protocol_name) {
+            case 'local':
+            case 'direct':
             case 'connected':
-              $protocols[] = "direct";
+              $protocols[] = "connected";
+              break;
+            case 'aggregate':
+            case 'static':
+              $protocols[] = "static";
               break;
             case 'rip1':
             case 'rip2':
             case 'ripv1':
             case 'ripv2':
-              $protocols[] = "rip";
+              if(is_numeric($id))
+                $protocols[] = "rip ".$id;
               break;
-            case 'rip':
-            case 'ripng':
-            case 'direct':
-            case 'static':
-            case 'local':
-            case 'bgp':
-            case 'ospf':
             case 'ospf2':
+            case 'ospfv2':
+              if(is_numeric($id))
+                $protocols[] = "ospf ".$id;
+              break;
             case 'ospf3':
-            case 'access':
-            case 'aggregate':
+              if(is_numeric($id))
+                $protocols[] = "ospfv3 ".$id;
+              break;
+            case 'bgp':
+            case 'rip':
+            case 'ospf':
+            case 'ospfv3':
+            case 'eigrp':
+              if(is_numeric($id))
+                $protocols[] = $protocol_name." ".$id;
+              break;
             case 'isis':
-              $protocols[] = $proto;
-              break;
-          }
-        }
-        $num = count($protocols);
-        if($num)
-          $match_conf[] = $pad."protocol ".($num > 1 ? "[ ":"").implode(' ', $protocols).($num > 1 ? " ]":"").";";
-        // Prefix list
-        foreach($match->getElementsByTagName('prefix-list') as $p) {
-          // Prefix list name is mandatory
-          $prefix_list_name = $p->nodeValue;
-          if(empty($prefix_list_name))
-            continue;
-          switch($p->getAttribute('match')) {
-            case 'longer':
-              $match_conf[] = $pad."prefix-list-filter ".$prefix_list_name." longer;";
-              break;
-            case 'orlonger':
-              $match_conf[] = $pad."prefix-list-filter ".$prefix_list_name." orlonger;";
+              if(!empty($id))
+                $protocols[] = $protocol_name." ".$id;
               break;
             default:
-              $match_conf[] = $pad."prefix-list-filter ".$prefix_list_name." exact;";
-              break;
+              continue 2;
           }
-          // Include prefix list definition ?
+        }
+        if(!empty($protocols))
+          $match_conf[] = "protocol in ( ".implode(" , ", $protocols)." )";
+        // Prefix list (prefix set)
+        $prefix_sets = array();
+        foreach($match->getElementsByTagName('prefix-list') as $p) {
+          // Prefix set name is mandatory
+          $prefix_set_name = $p->nodeValue;
+          if(empty($prefix_set_name))
+            continue;
+          $prefix_sets[] = "destination in ".$prefix_set_name;
+          // Include prefix set definition ?
           switch($p->getAttribute('include')) {
             case 'true':
             case 'yes':
             case 'on':
             case '1':
-              // Add prefix list name to the inclusion list
-              include_config($include, 'prefixlist', $prefix_list_name);
+              // Add prefix set name to the inclusion list
+              include_config($include, 'prefixlist', $prefix_set_name);
               break;
           }
         }
+        if(!empty($prefix_sets))
+          $match_conf[] = implode(" or\n".str_pad('', strlen($if)+5), $prefix_sets);
         // AS-path
         $aspaths = array();
         foreach($match->getElementsByTagName('as-path') as $a) {
-          // AS-path is mandatory
+          // AS-path name is mandatory
           $aspath = $a->nodeValue;
           if(!empty($aspath))
-            $aspaths[] = $aspath;
+            $aspaths[] = "as-path in ".$aspath;
         }
-        $num = count($aspaths);
-        if($num)
-          $match_conf[] = $pad."as-path ".($num > 1 ? "[ ":"").implode(' ', $aspaths).($num > 1 ? " ]":"").";";
+        if(!empty($aspaths))
+          $match_conf[] = implode(" or\n".str_pad('', strlen($if)+5), $aspaths);
         // Community
         $communities = array();
         foreach($match->getElementsByTagName('community') as $c) {
           // Community name is mandatory
           $community = $c->nodeValue;
           if(!empty($community))
-            $communities[] = $community;
+            $communities[] = "community matches-any ".$community;
         }
-        $num = count($communities);
-        if($num)
-          $match_conf[] = $pad."community ".($num > 1 ? "[ ":"").implode(' ', $communities).($num > 1 ? " ]":"").";";
-        // Neighbor
+        if(!empty($communities))
+          $match_conf[] = implode(" or\n".str_pad('', strlen($if)+5), $communities);
+        // Neighbor (advertising source of the route)
         $neighbors = array();
         foreach($match->getElementsByTagName('neighbor') as $n) {
           // Neighbor address is mandatory
@@ -173,13 +157,12 @@ function policy_generate($template, &$junos_conf, &$include)
           if(!empty($neighbor))
             $neighbors[] = $neighbor;
         }
-        $num = count($neighbors);
-        if($num)
-          $match_conf[] = $pad."neighbor ".($num > 1 ? "[ ":"").implode(' ', $neighbors).($num > 1 ? " ]":"").";";
+        if(!empty($neighbors))
+          $match_conf[] = "source in ( ".implode(" , ", $neighbors)." )";
 
         // Look for 'config' tags that contain
         // free-form, device-specific config
-        $ff = get_freeform_config($match, 'junos', 'append');
+        $ff = get_freeform_config($match, 'iosxr', 'append');
         if(!empty($ff))
           $match_conf[] = $ff;
 
@@ -187,86 +170,57 @@ function policy_generate($template, &$junos_conf, &$include)
         break;
       }
 
-      $pad = str_pad('', 4*($depth-1));
-
-      // If there's at least one match condition,
-      // create match section inside the term
-      if(!empty($match_conf)) {
-        $junos_conf[] = $pad."from {";
-        $junos_conf[] = implode("\n", $match_conf);
-        $junos_conf[] = $pad."}";
-      }
-
-      // Set/change attributes
-      $junos_conf[] = $pad."then {";
-      $pad = str_pad('', 4*$depth);
+      // Put together the RPL match line
+      $iosxr_conf[] = empty($match_conf) ?
+                        "  else":
+                        "  ".$if." ( ".implode(" ) and\n".str_pad('', strlen($if)+2)." ( ", $match_conf)." ) then";
 
       foreach($term->getElementsByTagName('set') as $set) {
 
         // Look for 'config' tags that contain
         // free-form, device-specific config
-        $ff = get_freeform_config($set, 'junos', 'prepend');
+        $ff = get_freeform_config($set, 'iosxr', 'prepend');
         if(!empty($ff))
-          $junos_conf[] = $ff;
+          $iosxr_conf[] = $ff;
 
         // AS-path prepend
         foreach($set->getElementsByTagName('prepend') as $p) {
           // AS-path prepend string is mandatory
           $prepend = $p->nodeValue;
           if(!empty($prepend))
-            $junos_conf[] = $pad."as-path-prepend \"".$prepend."\";";
+            $iosxr_conf[] = "    prepend as-path ".preg_replace('/\s+/', " . ", $prepend);
           break;
         }
         // Multi-exit discriminator (MED)
         foreach($set->getElementsByTagName('med') as $m) {
           // MED amount is mandatory
           $metric = $m->nodeValue;
-          if(is_numeric($metric))
-            $junos_conf[] = $pad."metric ".$metric.";";
-          break;
-        }
-        // Protocol preference (administrative distance)
-        foreach($set->getElementsByTagName('protocol-preference') as $p) {
-          // Preference amount is mandatory
-          $preference = $p->nodeValue;
-          if(!is_numeric($preference))
-            continue;
+          if(!is_numeric($metric))
+            break;
           switch($p->getAttribute('action')) {
             case '+':
             case 'add':
-              $junos_conf[] = $pad."preference add ".$preference.";";
+              $iosxr_conf[] = "    set med + ".$metric;
               break;
             case '-':
             case 'sub':
             case 'subtract':
-              $junos_conf[] = $pad."preference subtract ".$preference.";";
+              $iosxr_conf[] = "    set med - ".$metric;
               break;
             default:
-              $junos_conf[] = "preference ".$preference.";";
+              $iosxr_conf[] = "    set med ".$metric;
               break;
           }
+          // There can be only one MED
           break;
         }
         // Local preference
         foreach($set->getElementsByTagName('local-preference') as $l) {
           // Local preference amount is mandatory
           $preference = $l->nodeValue;
-          if(!is_numeric($preference))
-            continue;
-          switch($l->getAttribute('action')) {
-            case '+':
-            case 'add':
-              $junos_conf[] = $pad."local-preference add ".$preference.";";
-              break;
-            case '-':
-            case 'sub':
-            case 'subtract':
-              $junos_conf[] = $pad."local-preference subtract ".$preference.";";
-              break;
-            default:
-              $junos_conf[] = $pad."local-preference ".$preference.";";
-              break;
-          }
+          if(is_numeric($preference))
+            $iosxr_conf[] = "    set local-preference ".$preference;
+          // There can be only one local preference
           break;
         }
         // Origin
@@ -275,17 +229,18 @@ function policy_generate($template, &$junos_conf, &$include)
           switch($o->nodeValue) {
             case 'i':
             case 'igp':
-              $junos_conf[] = $pad."origin igp;";
+              $iosxr_conf[] = "    set origin igp";
               break;
             case 'e':
             case 'egp':
-              $junos_conf[] = $pad."origin egp;";
+              $iosxr_conf[] = "    set origin egp";
               break;
             case '?':
             case 'incomplete':
-              $junos_conf[] = $pad."origin incomplete;";
+              $iosxr_conf[] = "    set origin incomplete";
               break;
           }
+          // There can be only one origin
           break;
         }
         // Communities
@@ -301,15 +256,15 @@ function policy_generate($template, &$junos_conf, &$include)
           switch($action) {
             case '=':
             case 'set':
-              $junos_conf[] = $pad."community set ".$name.";";
+              $iosxr_conf[] = "    set community ".$name;
               break;
             case '+':
             case 'add':
-              $junos_conf[] = $pad."community add ".$name.";";
+              $iosxr_conf[] = "    set community ".$name." additive";
               break;
             case '-':
             case 'delete':
-              $junos_conf[] = $pad."community delete ".$name.";";
+              $iosxr_conf[] = "    delete community ".$name;
               break;
           }
         }
@@ -318,35 +273,34 @@ function policy_generate($template, &$junos_conf, &$include)
           // Next-hop spec is mandatory
           $next_hop = $n->nodeValue;
           if(empty($next_hop))
-            continue;
+            break;
           switch($next_hop) {
             case 'self':
-              $junos_conf[] = $pad."next-hop self;";
+              $iosxr_conf[] = "    set next-hop self";
               break;
             case 'reject':
-              $junos_conf[] = $pad."next-hop reject;";
-              break;
             case 'discard':
-              $junos_conf[] = $pad."next-hop discard;";
+              $iosxr_conf[] = "    set next-hop discard";
               break;
             case 'peer':
             case 'peeraddress':
             case 'peer-address':
             case 'peer_address':
-              $junos_conf[] = $pad."next-hop peer-address;";
+              $iosxr_conf[] = "    set next-hop peer-address";
               break;
             default:
-              $junos_conf[] = $pad."next-hop ".$next_hop.";";
+              $iosxr_conf[] = "    set next-hop ".$next_hop;
               break;
           }
+          // There can be only one next-hop
           break;
         }
 
         // Look for 'config' tags that contain
         // free-form, device-specific config
-        $ff = get_freeform_config($set, 'junos', 'append');
+        $ff = get_freeform_config($set, 'iosxr', 'append');
         if(!empty($ff))
-          $junos_conf[] = $ff;
+          $iosxr_conf[] = $ff;
 
         // There can be only one <set> within <term>
         break;
@@ -355,32 +309,31 @@ function policy_generate($template, &$junos_conf, &$include)
       // Add final action if defined
       $action = $term->getAttribute('action');
       if($action == "permit" || $action == "accept")
-        $junos_conf[] = $pad."accept;";
+        $iosxr_conf[] = "    pass";
       elseif($action == "deny" || $action == "reject")
-        $junos_conf[] = $pad."reject;";
-
-      $pad = str_pad('', --$depth*4);
-      $junos_conf[] = $pad."}";
+        $iosxr_conf[] = "    drop";
 
       // Look for 'config' tags that contain
       // free-form, device-specific config
-      $ff = get_freeform_config($term, 'junos', 'append');
+      $ff = get_freeform_config($term, 'iosxr', 'append');
       if(!empty($ff))
-        $junos_conf[] = $ff;
+        $iosxr_conf[] = $ff;
 
-      // End term
-      $pad = str_pad('', --$depth*4);
-      $junos_conf[] = $pad."}";
+      // End term and prepare for the next
+      $if = "elseif";
     }
+
+    // End policy terms
+    $iosxr_conf[] = "  endif";
 
     // Look for 'config' tags that contain
     // free-form, device-specific config
-    $ff = get_freeform_config($policy, 'junos', 'append');
+    $ff = get_freeform_config($policy, 'iosxr', 'append');
     if(!empty($ff))
-      $junos_conf[] = $ff;
+      $iosxr_conf[] = $ff;
 
-    // End policy statement
-    $junos_conf[] = "}";
+    // End policy
+    $iosxr_conf[] = "end-policy";
   }
 
   return true;

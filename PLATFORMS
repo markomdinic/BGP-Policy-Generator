@@ -10,6 +10,10 @@ Supported network platforms:
 
                     copy http://<yourhost>/ios/<type>/<name> run
 
+ 'iosxr'        - Cisco IOS XR
+                - You can generate configuration from shell or via http,
+                  save it as a local file and load it via tftp of ftp.
+
  'junos'        - JunOS, load merge format
                 - You can load configuration using something like
 

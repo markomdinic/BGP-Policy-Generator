@@ -18,10 +18,10 @@
 
 */
 
-function prefixlist_generate($template, &$junos_conf)
+function prefixlist_generate($template, &$iosxr_conf)
 {
   foreach($template->getElementsByTagName('prefix-list') as $prefix_list) {
-    // Prefix list name is mandatory
+    // Prefix set name is mandatory
     $name = $prefix_list->getAttribute('id');
     if(!is_name($name))
       continue;
@@ -45,11 +45,13 @@ function prefixlist_generate($template, &$junos_conf)
 
     // Look for 'config' tag that contains
     // free-form, platform-specific config
-    $ff = get_freeform_config($prefix_list, 'junos', 'prepend');
+    $ff = get_freeform_config($prefix_list, 'iosxr', 'prepend');
     if(!empty($ff))
       $conf[] = $ff;
 
-    // Build prefix list items
+    $items = array();
+
+    // Build prefix set items
     foreach($prefix_list->getElementsByTagName('item') as $i) {
       // Prefix is mandatory
       $prefix = $i->nodeValue;
@@ -58,25 +60,44 @@ function prefixlist_generate($template, &$junos_conf)
          ($family == 4 && !is_ipv4($prefix)) ||
          ($family == 6 && !is_ipv6($prefix)))
         continue;
-      // Build prefix list items in temporary storage
-      $conf[] = $prefix.";";
+
+      $len = "";
+
+      $upto = $i->getAttribute('upto');
+      if(is_numeric($upto) && preg_match('/\/(\d{1,2})$/', $prefix, $m)) {
+        switch($family) {
+          case 4:
+            if($upto >= 0 && $upto <= 32 && $upto > $m[1])
+              $len = " le ".$upto;
+            break;
+          case 6:
+            if($upto >= 0 || $upto <= 128 && $upto > $m[1])
+              $len = " le ".$upto;
+            break;
+        }
+      }
+      // Build prefix set items in temporary storage
+      $items[] = $prefix.$len;
     }
+
+    // Merge prefixes with the rest
+    $conf[] = implode(",\n ", $items);
 
     // Look for 'config' tag that contains
     // free-form, platform-specific config
-    $ff = get_freeform_config($prefix_list, 'junos', 'append');
+    $ff = get_freeform_config($prefix_list, 'iosxr', 'append');
     if(!empty($ff))
       $conf[] = $ff;
 
-    // We create prefix list indirectly to avoid adding
-    // an empty prefix-list into configuration in case
-    // no prefix list items were generated (possibly due
+    // We create prefix set indirectly to avoid adding
+    // an empty previx-set into configuration in case
+    // no prefix set items were generated (possibly due
     // to misconfiguration).
     if(count($conf)) {
-      $junos_conf[] = "prefix-list ".$name." {";
+      $iosxr_conf[] = "prefix-set ".$name;
       foreach($conf as $line)
-        $junos_conf[] = "    ".$line;
-      $junos_conf[] = "}";
+        $iosxr_conf[] = " ".$line;
+      $iosxr_conf[] = "end-set";
     }
   }
 

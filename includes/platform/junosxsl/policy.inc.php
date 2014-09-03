@@ -65,14 +65,15 @@ function policy_generate($template, &$junos_conf, &$include)
         $junos_conf[] = $ff;
 
       // Match conditions
-      $junos_conf[] = "<from>";
+      $match_conf = array();
+
       foreach($term->getElementsByTagName('match') as $match) {
 
         // Look for 'config' tags that contain
         // free-form, device-specific config
         $ff = get_freeform_config($match, 'junosxsl', 'prepend');
         if(!empty($ff))
-          $junos_conf[] = $ff;
+          $match_conf[] = $ff;
 
         // Family
         foreach($match->getElementsByTagName('family') as $f) {
@@ -80,14 +81,14 @@ function policy_generate($template, &$junos_conf, &$include)
           switch($f->nodeValue) {
             case 'inet':
             case 'ipv4':
-              $junos_conf[] = "<family>inet</family>";
+              $match_conf[] = "<family>inet</family>";
               break;
             case 'inet6':
             case 'ipv6':
-              $junos_conf[] = "<family>inet6</family>";
+              $match_conf[] = "<family>inet6</family>";
               break;
             case 'iso':
-              $junos_conf[] = "<family>iso</family>";
+              $match_conf[] = "<family>iso</family>";
               break;
           }
           break;
@@ -97,13 +98,13 @@ function policy_generate($template, &$junos_conf, &$include)
           $proto = $p->nodeValue;
           switch($proto) {
             case 'connected':
-              $junos_conf[] = "<protocol>direct</protocol>";
+              $match_conf[] = "<protocol>direct</protocol>";
               break;
             case 'rip1':
             case 'rip2':
             case 'ripv1':
             case 'ripv2':
-              $junos_conf[] = "<protocol>rip</protocol>";
+              $match_conf[] = "<protocol>rip</protocol>";
               break;
             case 'rip':
             case 'ripng':
@@ -117,7 +118,7 @@ function policy_generate($template, &$junos_conf, &$include)
             case 'access':
             case 'aggregate':
             case 'isis':
-              $junos_conf[] = "<protocol>".$proto."</protocol>";
+              $match_conf[] = "<protocol>".$proto."</protocol>";
               break;
           }
         }
@@ -127,20 +128,20 @@ function policy_generate($template, &$junos_conf, &$include)
           $prefix_list_name = $p->nodeValue;
           if(empty($prefix_list_name))
             continue;
-          $junos_conf[] = "<prefix-list-filter>";
-          $junos_conf[] = "<list_name>".$prefix_list_name."</list_name>";
+          $match_conf[] = "<prefix-list-filter>";
+          $match_conf[] = "<list_name>".$prefix_list_name."</list_name>";
           switch($p->getAttribute('match')) {
             case 'longer':
-              $junos_conf[] = "<longer/>";
+              $match_conf[] = "<longer/>";
               break;
             case 'orlonger':
-              $junos_conf[] = "<orlonger/>";
+              $match_conf[] = "<orlonger/>";
               break;
             default:
-              $junos_conf[] = "<exact/>";
+              $match_conf[] = "<exact/>";
               break;
           }
-          $junos_conf[] = "</prefix-list-filter>";
+          $match_conf[] = "</prefix-list-filter>";
           // Include prefix list definition ?
           switch($p->getAttribute('include')) {
             case 'true':
@@ -157,33 +158,40 @@ function policy_generate($template, &$junos_conf, &$include)
           // AS-path is mandatory
           $aspath = $a->nodeValue;
           if(!empty($aspath))
-            $junos_conf[] = "<as-path>".$aspath."</as-path>";
+            $match_conf[] = "<as-path>".$aspath."</as-path>";
         }
         // Community
         foreach($match->getElementsByTagName('community') as $c) {
           // Community name is mandatory
           $community = $c->nodeValue;
           if(!empty($community))
-            $junos_conf[] = "<community>".$community."</community>";
+            $match_conf[] = "<community>".$community."</community>";
         }
         // Neighbor
         foreach($match->getElementsByTagName('neighbor') as $n) {
           // Neighbor address is mandatory
           $neighbor = $n->nodeValue;
           if(!empty($neighbor))
-            $junos_conf[] = "<neighbor>".$neighbor."</neighbor>";
+            $match_conf[] = "<neighbor>".$neighbor."</neighbor>";
         }
 
         // Look for 'config' tags that contain
         // free-form, device-specific config
         $ff = get_freeform_config($match, 'junosxsl', 'append');
         if(!empty($ff))
-          $junos_conf[] = $ff;
+          $match_conf[] = $ff;
 
-        // There can be only one <match? within <term>
+        // There can be only one <match> within <term>
         break;
       }
-      $junos_conf[] = "</from>";
+
+      // If there's at least one match condition,
+      // create match section inside the term
+      if(!empty($match_conf)) {
+        $junos_conf[] = "<from>";
+        $junos_conf[] = implode("\n", $match_conf);
+        $junos_conf[] = "</from>";
+      }
 
       // Set/change attributes
       $junos_conf[] = "<then>";
@@ -337,13 +345,6 @@ function policy_generate($template, &$junos_conf, &$include)
           break;
         }
 
-        // Add final action if defined
-        $action = $term->getAttribute('action');
-        if($action == "permit" || $action == "accept")
-          $junos_conf[] = "<accept/>";
-        elseif($action == "deny" || $action == "reject")
-          $junos_conf[] = "<reject/>";
-
         // Look for 'config' tags that contain
         // free-form, device-specific config
         $ff = get_freeform_config($set, 'junosxsl', 'append');
@@ -353,6 +354,15 @@ function policy_generate($template, &$junos_conf, &$include)
         // There can be only one <set> within <term>
         break;
       }
+
+      // Add final action if defined
+      $action = $term->getAttribute('action');
+      if($action == "permit" || $action == "accept")
+        $junos_conf[] = "<accept/>";
+      elseif($action == "deny" || $action == "reject")
+        $junos_conf[] = "<reject/>";
+
+      // End set
       $junos_conf[] = "</then>";
 
       // Look for 'config' tags that contain

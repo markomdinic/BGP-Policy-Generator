@@ -462,37 +462,34 @@ function update_template($autotemplate, &$statusmsg="")
 
       // Process set element inside current term
       foreach($term->getElementsByTagName('set') as $set) {
-        // If term is not empty ...
-        if(count($term_elements) > 0) {
-          // Begin set element in the policy template
-          $term_elements[] = "<set>";
-          // Copy all set statements within the set element
-          foreach($set->childNodes as $tag) {
-            // Tag name must be known
-            $tag_name = $tag->nodeName;
-            // Skip comments
-            if(empty($tag_name) || $tag_name == '#comment')
-              continue;
-            // Tag value must exist ...
-            $tag_value = $tag->nodeValue;
-            // ... even if it is an empty string
-            if(empty($tag_value))
-              $tag_value = "";
-            $attrs = array();
-            // Build all set statement's attributes
-            if($tag->hasAttributes()) {
-              foreach($tag->attributes as $attr => $attrval) {
-                $val = $attrval->nodeValue;
-                if(!empty($val))
-                  $attrs[] = $attr."=\"".$val."\"";
-              }
+        // Begin set element in the policy template
+        $term_elements[] = "<set>";
+        // Copy all set statements within the set element
+        foreach($set->childNodes as $tag) {
+          // Tag name must be known
+          $tag_name = $tag->nodeName;
+          // Skip comments
+          if(empty($tag_name) || $tag_name == '#comment')
+            continue;
+          // Tag value must exist ...
+          $tag_value = $tag->nodeValue;
+          // ... even if it is an empty string
+          if(empty($tag_value))
+            $tag_value = "";
+          $attrs = array();
+          // Build all set statement's attributes
+          if($tag->hasAttributes()) {
+            foreach($tag->attributes as $attr => $attrval) {
+              $val = $attrval->nodeValue;
+              if(!empty($val))
+                $attrs[] = $attr."=\"".$val."\"";
             }
-            // Add tag to the set element in the policy template
-            $term_elements[] = "<".$tag_name.(count($attrs) > 0 ? " ".implode(" ", $attrs):"").">".$tag_value."</".$tag_name.">";
           }
-          // Close set element in the policy template
-          $term_elements[] = "</set>";
+          // Add tag to the set element in the policy template
+          $term_elements[] = "<".$tag_name.(count($attrs) > 0 ? " ".implode(" ", $attrs):"").">".$tag_value."</".$tag_name.">";
         }
+        // Close set element in the policy template
+        $term_elements[] = "</set>";
         // There can be only one set element
         break;
       }
@@ -503,7 +500,8 @@ function update_template($autotemplate, &$statusmsg="")
         $policy_elements[] = "<term id=\"".$term_id."\" action=\"".$term_action."\">";
         $policy_elements[] = implode("\n", $term_elements);
         $policy_elements[] = "</term>";
-      }
+      } else
+        $policy_elements[] = "<term id=\"".$term_id."\" action=\"".$term_action."\"/>";
 
     }
 
