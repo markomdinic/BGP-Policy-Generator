@@ -445,9 +445,11 @@ function as_set($as_set_name, &$members=array(), &$expanded=array())
         continue;
       $member = $m[1];
       // If member is a simple ASN ...
-      if(preg_match('/(AS\d+)/i', $member, $m))
+//      if(preg_match('/(AS\d+)/i', $member, $m))
+      if(is_asn($member))
         // ... just store it along with the rest
-        $members[$m[1]] = $m[1];
+//        $members[$m[1]] = $m[1];
+        $members[$member] = $member;
       // Otherwise, member should be an as-set ...
       else
         // Try to expand it
@@ -459,6 +461,132 @@ function as_set($as_set_name, &$members=array(), &$expanded=array())
   $as_set['members'] = $members;
 
   return $as_set;
+}
+
+function route_set($route_set_name, &$members=array(), &$expanded=array())
+{
+  // Uppercase the route set name
+  $route_set_name = strtoupper($route_set_name);
+
+  // If already expanded, abort
+  if(isset($expanded[$route_set_name]))
+    return;
+
+  // Set ourselves as expanded to prevent
+  // route-set loops when called recursively
+  $expanded[$route_set_name] = true;
+
+  // Fetch route set data
+  $object = query_whois($route_set_name, 'route-set');
+  if(!isset($object) || !is_array($object))
+    return;
+
+  // Uppercase found object's keys
+  $object = array_change_key_case($object, CASE_UPPER);
+
+  // Proper route-set object must have members attribute
+  if(!isset($object[$route_set_name]) ||
+     !isset($object[$route_set_name]['members']))
+    return;
+
+  // Store basic route-set object attributes
+  // (only the important ones)
+  $route_set = array('route-set' => $route_set_name);
+
+  // Make sure we will be iterating over array of unique members
+  $raw_members = is_array($object[$route_set_name]['members']) ?
+                   array_unique($object[$route_set_name]['members']):
+                   array($object[$route_set_name]['members']);
+
+  // Recursively copy and expand member attributes
+  foreach($raw_members as $member) {
+    // Skip parsing errors
+    if(empty($member))
+      continue;
+    // String might contain comma-separated list of members
+    foreach(preg_split('/(?:\^[^,\s]*)?\s*[,\s]\s*/', strtoupper($member)) as $member) {
+      // Strip leading and trailing trash
+      if(!preg_match('/([^\s#]+)/', $member, $m))
+        continue;
+      $member = $m[1];
+      // If member is an IPv4 prefix ...
+      if(is_ipv4($member))
+        // ... just store it along with the rest
+        $members[$member] = $member;
+      // Otherwise, member should be a route-set ...
+      else
+        // Try to expand it
+        route_set($member, $members, $expanded);
+    }
+  }
+
+  // Store expanded members array
+  $route_set['members'] = $members;
+
+  return $route_set;
+}
+
+function route6_set($route_set_name, &$members=array(), &$expanded=array())
+{
+  // Uppercase the route set name
+  $route_set_name = strtoupper($route_set_name);
+
+  // If already expanded, abort
+  if(isset($expanded[$route_set_name]))
+    return;
+
+  // Set ourselves as expanded to prevent
+  // route-set loops when called recursively
+  $expanded[$route_set_name] = true;
+
+  // Fetch route set data
+  $object = query_whois($route_set_name, 'route-set');
+  if(!isset($object) || !is_array($object))
+    return;
+
+  // Uppercase found object's keys
+  $object = array_change_key_case($object, CASE_UPPER);
+
+  // Proper route-set object must have mp-members attribute
+  if(!isset($object[$route_set_name]) ||
+     !isset($object[$route_set_name]['mp-members']))
+    return;
+
+  // Store basic route-set object attributes
+  // (only the important ones)
+  $route_set = array('route-set' => $route_set_name);
+
+  // Make sure we will be iterating over array of unique mp-members
+  $raw_members = is_array($object[$route_set_name]['mp-members']) ?
+                   array_unique($object[$route_set_name]['mp-members']):
+                   array($object[$route_set_name]['mp-members']);
+
+  // Recursively copy and expand member attributes
+  foreach($raw_members as $member) {
+    // Skip parsing errors
+    if(empty($member))
+      continue;
+    // String might contain comma-separated list of members
+    foreach(preg_split('/(?:\^[^,\s]*)?\s*[,\s]\s*/', strtoupper($member)) as $member) {
+      // Strip leading and trailing trash
+      if(!preg_match('/([^\s#]+)/', $member, $m))
+        continue;
+      $member = $m[1];
+      // If member is an IPv6 prefix ...
+      if(is_ipv6($member))
+        // ... just store it along with the rest
+        $members[$member] = $member;
+      // Otherwise, member should be a route-set ...
+      else
+        // Try to expand it
+        route6_set($member, $members, $expanded);
+    }
+  }
+
+  // Store expanded members array
+  $route_set['mp-members'] = $members;
+
+  return $route_set;
 }
 
 // ***************************** PREFIX FUNCTIONS *****************************
@@ -515,7 +643,7 @@ function get_ipv6_prefix_origin($prefix)
   return $object[$prefix]['origin'];
 }
 
-// ****************************** POLICY FUNCTIONS ****************************
+// ***************************** POLICY FUNCTIONS *****************************
 
 function get_export_from_to($from_asn, $to_asn)
 {
@@ -543,11 +671,17 @@ function get_export_from_to($from_asn, $to_asn)
     return;
 
   // If exporting as-set ...
-  if(!preg_match('/^AS\d+$/i', $exported)) {
+  if(preg_match('/^AS\-/i', $exported)) {
     // ... expand it into a full list of ASNs
     $as_set = as_set($exported);
     if(isset($as_set) && is_array($as_set))
       $exported = array_keys($as_set['members']);
+  // If exporting route-set ...
+  } elseif(preg_match('/^RS\-/i', $exported)) {
+    // ... expand it into a full list of prefixes
+    $route_set = route_set($exported);
+    if(isset($route_set) && is_array($route_set))
+      $exported = array_keys($route_set['members']);
   }
 
   return $exported;
@@ -579,11 +713,17 @@ function get_mpexport_from_to($from_asn, $to_asn)
     return;
 
   // If exporting as-set ...
-  if(!preg_match('/^AS\d+$/i', $exported)) {
+  if(preg_match('/^AS\-/i', $exported)) {
     // ... expand it into a full list of ASNs
     $as_set = as_set($exported);
     if(isset($as_set) && is_array($as_set))
       $exported = array_keys($as_set['members']);
+  // If exporting route-set ...
+  } elseif(preg_match('/^RS\-/i', $exported)) {
+    // ... expand it into a full list of prefixes
+    $route_set = route6_set($exported);
+    if(isset($route_set) && is_array($route_set))
+      $exported = array_keys($route_set['mp-members']);
   }
 
   return $exported;
@@ -685,7 +825,7 @@ function get_announced_ipv6_prefixes($from_asn, $to_asn)
        $config['use_ris'] === TRUE)
       return query_ris($exported, 'route6');
 
-    // Use Whois to fetch prefixes by dcefault
+    // Use Whois to fetch prefixes by default
 
     // Request prefixes for every ASN in the list
     // (slow but more reliable than RIS)
