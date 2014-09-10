@@ -64,37 +64,70 @@ function status_message($msg, &$log)
   return $msg;
 }
 
-function is_name($name)
+function is_name($names)
 {
-  if(empty($name))
+  if(empty($names))
     return false;
 
-  return preg_match('/^[a-zA-Z0-9\-\.\_]+$/', $name);
+  if(!is_array($names))
+    $names = array($names);
+
+  foreach($names as $name) {
+    if(!preg_match('/^[a-zA-Z0-9\-\.\_]+$/', $name))
+      return false;
+  }
+
+  return true;
 }
 
-function is_asn($asn)
+function is_asn($asns)
 {
-  if(preg_match('/^(?:AS)?(\d+)$/i', $asn, $m))
-    if($m[1] >= 1 && $m[1] <= 4294967294)
-      return true;
+  if(empty($asns))
+    return false;
 
-  return false;
+  if(!is_array($asns))
+    $asns = array($asns);
+
+  foreach($asns as $asn) {
+    if(!preg_match('/^(?:AS)?(\d+)$/i', $asn, $m))
+      return false;
+    if($m[1] < 1 || $m[1] > 4294967294)
+      return false;
+  }
+
+  return true;
 }
 
-function is_ipv4($prefix)
+function is_ipv4($prefixes)
 {
-  if(preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/', $prefix))
-    return true;
+  if(empty($prefixes))
+    return false;
 
-  return false;
+  if(!is_array($prefixes))
+    $prefixes = array($prefixes);
+
+  foreach($prefixes as $prefix) {
+    if(!preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/', $prefix))
+      return false;
+  }
+
+  return true;
 }
 
-function is_ipv6($prefix)
+function is_ipv6($prefixes)
 {
-  if(preg_match('/^(?:((?=(?>.*?(::))(?!.*?\2)))\2?|([\da-f]{1,4}(?:\2|:\b|(?=[^\da-f]|\b))|\1))(?3){7}\/\d{1,2}$/i', $prefix))
-    return true;
+  if(empty($prefixes))
+    return false;
 
-  return false;
+  if(!is_array($prefixes))
+    $prefixes = array($prefixes);
+
+  foreach($prefixes as $prefix) {
+    if(!preg_match('/^(?:((?=(?>.*?(::))(?!.*?\2)))\2?|([\da-f]{1,4}(?:\2|:\b|(?=[^\da-f]|\b))|\1))(?3){7}\/\d{1,2}$/i', $prefix))
+      return false;
+  }
+
+  return true;
 }
 
 function is_valid_subnet_size($size)

@@ -166,13 +166,12 @@ function query_whois($query, $type=NULL, $attr=NULL)
   if(!isset($sock))
     return;
 
-  // All specific matches and
-  // leave out contact info
+  // Leave out contact info
   // to avoid daily limit ban:
   //
   //   http://www.ripe.net/data-tools/db/faq/faq-db/why-did-you-receive-the-error-201-access-denied
   //
-  $command = "-M -r";
+  $command = "-r";
   // Preferred object type
   if(!empty($type))
     $command .= " -T".$type;
@@ -300,10 +299,20 @@ function aut_num($asn)
       if(preg_match('/from\s+([^\s:;#]+)/i', $import, $m))
         $from = strtoupper($m[1]);
       // Extract filter that defines what will be imported
-      if(preg_match('/accept\s+([^\s:;#]+)/i', $import, $m))
-        $what = strtoupper($m[1]);
+      if(preg_match('/accept\s+(?:\{\s*([^\{\}]+?)\s*\}|([^\s:;#]+))/i', $import, $m)) {
+        // Inline filter ?
+        if(!empty($m[1]))
+          // Split inline filter specification
+          // into an array of prefixes
+          $what = preg_split('/\s*[,;]\s*/', $m[1]);
+        // AS, AS-SET or ANY ?
+        elseif(!empty($m[2]))
+          // Make sure this is always uppercase
+          $what = strtoupper($m[2]);
+      }
       // Store dumbed down version of import attribute
-      $aut_num['import'][$from] = $what;
+      if(!empty($what))
+        $aut_num['import'][$from] = $what;
     }
   }
   // Copy export attribute(s)
@@ -316,10 +325,20 @@ function aut_num($asn)
       if(preg_match('/to\s+([^\s:;#]+)/i', $export, $m))
         $to = strtoupper($m[1]);
       // Extract filter that defines what will be exported
-      if(preg_match('/announce\s+([^\s:;#]+)/i', $export, $m))
-        $what = strtoupper($m[1]);
+      if(preg_match('/announce\s+(?:\{\s*([^\{\}]+?)\s*\}|([^\s:;#]+))/i', $export, $m)) {
+        // Inline filter ?
+        if(!empty($m[1]))
+          // Split inline filter specification
+          // into an array of prefixes
+          $what = preg_split('/\s*[,;]\s*/', $m[1]);
+        // AS, AS-SET or ANY ?
+        elseif(!empty($m[2]))
+          // Make sure this is always uppercase
+          $what = strtoupper($m[2]);
+      }
       // Store dumbed down version of export attribute
-      $aut_num['export'][$to] = $what;
+      if(!empty($what))
+        $aut_num['export'][$to] = $what;
     }
   }
   // Copy mp-import attribute(s)
@@ -332,10 +351,20 @@ function aut_num($asn)
       if(preg_match('/from\s+([^\s:;#]+)/i', $import, $m))
         $from = strtoupper($m[1]);
       // Extract filter that defines what will be imported
-      if(preg_match('/accept\s+([^\s:;#]+)/i', $import, $m))
-        $what = strtoupper($m[1]);
+      if(preg_match('/accept\s+(?:\{\s*([^\{\}]+?)\s*\}|([^\s:;#]+))/i', $import, $m)) {
+        // Inline filter ?
+        if(!empty($m[1]))
+          // Split inline filter specification
+          // into an array of prefixes
+          $what = preg_split('/\s*[,;]\s*/', $m[1]);
+        // AS, AS-SET or ANY ?
+        elseif(!empty($m[2]))
+          // Make sure this is always uppercase
+          $what = strtoupper($m[2]);
+      }
       // Store dumbed down version of import attribute
-      $aut_num['mp-import'][$from] = $what;
+      if(!empty($what))
+        $aut_num['mp-import'][$from] = $what;
     }
   }
   // Copy mp-export attribute(s)
@@ -348,10 +377,20 @@ function aut_num($asn)
       if(preg_match('/to\s+([^\s:;#]+)/i', $export, $m))
         $to = strtoupper($m[1]);
       // Extract filter that defines what will be exported
-      if(preg_match('/announce\s+([^\s:;#]+)/i', $export, $m))
-        $what = strtoupper($m[1]);
+      if(preg_match('/announce\s+(?:\{\s*([^\{\}]+?)\s*\}|([^\s:;#]+))/i', $export, $m)) {
+        // Inline filter ?
+        if(!empty($m[1]))
+          // Split inline filter specification
+          // into an array of prefixes
+          $what = preg_split('/\s*[,;]\s*/', $m[1]);
+        // AS, AS-SET or ANY ?
+        elseif(!empty($m[2]))
+          // Make sure this is always uppercase
+          $what = strtoupper($m[2]);
+      }
       // Store dumbed down version of export attribute
-      $aut_num['mp-export'][$to] = $what;
+      if(!empty($what))
+        $aut_num['mp-export'][$to] = $what;
     }
   }
 
@@ -422,7 +461,7 @@ function as_set($as_set_name, &$members=array(), &$expanded=array())
   return $as_set;
 }
 
-// ************************ PREFIX RETRIEVAL FUNCTIONS ************************
+// ***************************** PREFIX FUNCTIONS *****************************
 
 function get_ipv4_prefixes_by_origin($asn)
 {
@@ -448,6 +487,34 @@ function get_ipv6_prefixes_by_origin($asn)
   return array_keys($object);
 }
 
+function get_ipv4_prefix_origin($prefix)
+{
+  // Fetch route object for these prefix
+  $object = query_whois($prefix, 'route');
+  if(!isset($object) ||
+     !is_array($object) ||
+     !isset($object[$prefix]) ||
+     !is_array($object[$prefix]) ||
+     empty($object[$prefix]['origin']))
+    return;
+
+  return $object[$prefix]['origin'];
+}
+
+function get_ipv6_prefix_origin($prefix)
+{
+  // Fetch route6 object for these prefix
+  $object = query_whois($prefix, 'route6');
+  if(!isset($object) ||
+     !is_array($object) ||
+     !isset($object[$prefix]) ||
+     !is_array($object[$prefix]) ||
+     empty($object[$prefix]['origin']))
+    return;
+
+  return $object[$prefix]['origin'];
+}
+
 // ****************************** POLICY FUNCTIONS ****************************
 
 function get_export_from_to($from_asn, $to_asn)
@@ -460,11 +527,16 @@ function get_export_from_to($from_asn, $to_asn)
      !isset($aut_num['export'][$to_asn]))
     return;
 
-  // Name of the object source AS
-  // is exporting to target AS
+  // Get whatever source AS is exporting to target AS
   $exported = $aut_num['export'][$to_asn];
   if(!isset($exported))
     return;
+
+  // If directly exporting prefixes
+  // embedded into export attribute ...
+  if(is_array($exported))
+    // ... nothing more to be done here
+    return $exported;
 
   // Ignore ANY
   if(preg_match('/^ANY$/i', $exported))
@@ -491,10 +563,19 @@ function get_mpexport_from_to($from_asn, $to_asn)
      !isset($aut_num['mp-export'][$to_asn]))
     return;
 
-  // Name of the object source AS
-  // is exporting to target AS
+  // Get whatever source AS is exporting to target AS
   $exported = $aut_num['mp-export'][$to_asn];
   if(!isset($exported))
+    return;
+
+  // If directly exporting prefixes
+  // embedded into export attribute ...
+  if(is_array($exported))
+    // ... nothing more to be done here
+    return $exported;
+
+  // Ignore ANY
+  if(preg_match('/^ANY$/i', $exported))
     return;
 
   // If exporting as-set ...
@@ -512,7 +593,7 @@ function get_announced_ipv4_prefixes($from_asn, $to_asn)
 {
   global $config;
 
-  // Get the list of ASNs exported
+  // Get the list of exports
   // by <from_asn> to <to_asn>
   $exported = get_export_from_to($from_asn, $to_asn);
   if(!isset($exported))
@@ -523,25 +604,45 @@ function get_announced_ipv4_prefixes($from_asn, $to_asn)
   if(!is_array($exported))
     $exported = array($exported);
 
-  // Use RIS server to fetch prefixes ?
-  if(isset($config['use_ris']) &&
-     $config['use_ris'] === TRUE)
-    return query_ris($exported, 'route');
-
-  // Use Whois to fetch prefixes by dcefault
-
   $announced = array();
 
-  // Request prefixes for every ASN in the list
-  // (slow but more reliable than RIS)
-  foreach($exported as $asn) {
-    // Skip target ASN if found among exported ASNs.
-    // No point exporting it to itself.
-    if($asn == $to_asn)
-      continue;
-    $prefixes = get_ipv4_prefixes_by_origin($asn);
-    if(isset($prefixes))
-      $announced[$asn] = $prefixes;
+  // If array elements are IPv4 prefixes ...
+  if(is_ipv4($exported)) {
+
+    // ... we got inline list of prefixes
+    foreach($exported as $prefix) {
+      // Resolve prefix origin
+      // (slow with large number of prefixes)
+      $asn = get_ipv4_prefix_origin($prefix);
+      // Store prefix into announced list
+      if(!empty($asn))
+        $announced[$asn][] = $prefix;
+    }
+
+  // Otherwise, if not IPv6 prefixes
+  // (which would surely be a mistake) ...
+  } elseif(!is_ipv6($exported)) {
+
+    // Use RIS server to fetch prefixes ?
+    if(isset($config['use_ris']) &&
+       $config['use_ris'] === TRUE)
+      return query_ris($exported, 'route');
+
+    // Use Whois to fetch prefixes by default
+
+    // Request prefixes for every ASN in the list
+    // (slow but more reliable than RIS)
+    foreach($exported as $asn) {
+      // Skip target ASN if found among exported ASNs.
+      // No point exporting it to itself.
+      if($asn == $to_asn)
+        continue;
+      $prefixes = get_ipv4_prefixes_by_origin($asn);
+      // Store prefixes into announced list
+      if(isset($prefixes))
+        $announced[$asn] = $prefixes;
+    }
+
   }
 
   return $announced;
@@ -549,7 +650,7 @@ function get_announced_ipv4_prefixes($from_asn, $to_asn)
 
 function get_announced_ipv6_prefixes($from_asn, $to_asn)
 {
-  // Get the list of ASNs exported
+  // Get the list of exports
   // by <from_asn> to <to_asn>
   $exported = get_mpexport_from_to($from_asn, $to_asn);
   if(!isset($exported))
@@ -560,25 +661,45 @@ function get_announced_ipv6_prefixes($from_asn, $to_asn)
   if(!is_array($exported))
     $exported = array($exported);
 
-  // Use RIS server to fetch prefixes ?
-  if(isset($config['use_ris']) &&
-     $config['use_ris'] === TRUE)
-    return query_ris($exported, 'route6');
-
-  // Use Whois to fetch prefixes by dcefault
-
   $announced = array();
 
-  // Request prefixes for every ASN in the list
-  // (slow but more reliable than RIS)
-  foreach($exported as $asn) {
-    // Skip target ASN if found among exported ASNs.
-    // No point exporting it to itself.
-    if($asn == $to_asn)
-      continue;
-    $prefixes = get_ipv6_prefixes_by_origin($asn);
-    if(isset($prefixes))
-      $announced[$asn] = $prefixes;
+  // If array elements are IPv6 prefixes ...
+  if(is_ipv6($exported)) {
+
+    // ... we got inline list of announced prefixes
+    foreach($exported as $prefix) {
+      // Resolve prefix origin
+      // (slow with large number of prefixes)
+      $asn = get_ipv6_prefix_origin($prefix);
+      // Store prefix into announced list
+      if(!empty($asn))
+        $announced[$asn][] = $prefix;
+    }
+
+  // Otherwise, if not IPv4 prefixes
+  // (which would surely be a mistake) ...
+  } elseif(!is_ipv4($exported)) {
+
+    // Use RIS server to fetch prefixes ?
+    if(isset($config['use_ris']) &&
+       $config['use_ris'] === TRUE)
+      return query_ris($exported, 'route6');
+
+    // Use Whois to fetch prefixes by dcefault
+
+    // Request prefixes for every ASN in the list
+    // (slow but more reliable than RIS)
+    foreach($exported as $asn) {
+      // Skip target ASN if found among exported ASNs.
+      // No point exporting it to itself.
+      if($asn == $to_asn)
+        continue;
+      $prefixes = get_ipv6_prefixes_by_origin($asn);
+      // Store prefixes into announced list
+      if(isset($prefixes))
+        $announced[$asn] = $prefixes;
+    }
+
   }
 
   return $announced;
