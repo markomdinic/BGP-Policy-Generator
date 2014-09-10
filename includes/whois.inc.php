@@ -304,7 +304,7 @@ function aut_num($asn)
         if(!empty($m[1]))
           // Split inline filter specification
           // into an array of prefixes
-          $what = preg_split('/\s*[,;]\s*/', $m[1]);
+          $what = preg_split('/(?:\^\S*)?[^A-F\d\.:\/]+/i', $m[1]);
         // AS, AS-SET or ANY ?
         elseif(!empty($m[2]))
           // Make sure this is always uppercase
@@ -330,7 +330,7 @@ function aut_num($asn)
         if(!empty($m[1]))
           // Split inline filter specification
           // into an array of prefixes
-          $what = preg_split('/\s*[,;]\s*/', $m[1]);
+          $what = preg_split('/(?:\^\S*)?[^A-F\d\.:\/]+/i', $m[1]);
         // AS, AS-SET or ANY ?
         elseif(!empty($m[2]))
           // Make sure this is always uppercase
@@ -356,7 +356,7 @@ function aut_num($asn)
         if(!empty($m[1]))
           // Split inline filter specification
           // into an array of prefixes
-          $what = preg_split('/\s*[,;]\s*/', $m[1]);
+          $what = preg_split('/(?:\^\S*)?[^A-F\d\.:\/]+/i', $m[1]);
         // AS, AS-SET or ANY ?
         elseif(!empty($m[2]))
           // Make sure this is always uppercase
@@ -382,7 +382,7 @@ function aut_num($asn)
         if(!empty($m[1]))
           // Split inline filter specification
           // into an array of prefixes
-          $what = preg_split('/\s*[,;]\s*/', $m[1]);
+          $what = preg_split('/(?:\^\S*)?[^A-F\d\.:\/]+/i', $m[1]);
         // AS, AS-SET or ANY ?
         elseif(!empty($m[2]))
           // Make sure this is always uppercase
