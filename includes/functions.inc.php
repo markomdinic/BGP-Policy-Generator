@@ -233,6 +233,11 @@ function update_template($autotemplate, &$statusmsg="")
           continue 3;
       }
 
+      // This variable will hold the number
+      // of <auto-prefix-list> tags specified
+      // within this term's <match> element
+      $auto_prefix_list_count = 0;
+
       // This array will receive match and set
       // elements built as strings in XML format
       $term_elements = array();
@@ -416,14 +421,15 @@ function update_template($autotemplate, &$statusmsg="")
 
         }
 
-        // If autopolicy template's match element
-        // specifies prefix list tags, but policy
-        // template we are building ended up with
-        // none, match element is incomplete, thus
-        // making the term invalid.
+        // Get the number of <auto-prefix-list> tags
+        // contained inside current <match> element
+        $auto_prefix_list_count = $prefix_lists->length;
 
-        // Copy the rest of match conditions
-        if($prefix_lists->length < 1 || count($match_elements) > 0) {
+        // Copy the rest of match conditions unless
+        // <match> contains <auto-prefix-list> tags
+        // that produced no prefix lists, thus making
+        // the <match> section invalid
+        if($auto_prefix_list_count < 1 || count($match_elements) > 0) {
           // Begin match element in the policy template
           $term_elements[] = "<match>";
           // If match conditions are present,
@@ -460,38 +466,45 @@ function update_template($autotemplate, &$statusmsg="")
         break;
       }
 
-      // Process set element inside current term
-      foreach($term->getElementsByTagName('set') as $set) {
-        // Begin set element in the policy template
-        $term_elements[] = "<set>";
-        // Copy all set statements within the set element
-        foreach($set->childNodes as $tag) {
-          // Tag name must be known
-          $tag_name = $tag->nodeName;
-          // Skip comments
-          if(empty($tag_name) || $tag_name == '#comment')
-            continue;
-          // Tag value must exist ...
-          $tag_value = $tag->nodeValue;
-          // ... even if it is an empty string
-          if(empty($tag_value))
-            $tag_value = "";
-          $attrs = array();
-          // Build all set statement's attributes
-          if($tag->hasAttributes()) {
-            foreach($tag->attributes as $attr => $attrval) {
-              $val = $attrval->nodeValue;
-              if(!empty($val))
-                $attrs[] = $attr."=\"".$val."\"";
+      // Copy all set statements unless <match> contains
+      // <auto-prefix-list> tags that produced no prefix
+      // lists, thus making the <match> section invalid
+      // and, in turn, the entire <term>, which makes
+      // the <set> section unneccessary
+      if($auto_prefix_list_count < 1 || count($term_elements) > 0) {
+        // Process set element inside current term
+        foreach($term->getElementsByTagName('set') as $set) {
+          // Begin set element in the policy template
+          $term_elements[] = "<set>";
+          // Copy all set statements within the set element
+          foreach($set->childNodes as $tag) {
+            // Tag name must be known
+            $tag_name = $tag->nodeName;
+            // Skip comments
+            if(empty($tag_name) || $tag_name == '#comment')
+              continue;
+            // Tag value must exist ...
+            $tag_value = $tag->nodeValue;
+            // ... even if it is an empty string
+            if(empty($tag_value))
+              $tag_value = "";
+            $attrs = array();
+            // Build all set statement's attributes
+            if($tag->hasAttributes()) {
+              foreach($tag->attributes as $attr => $attrval) {
+                $val = $attrval->nodeValue;
+                if(!empty($val))
+                  $attrs[] = $attr."=\"".$val."\"";
+              }
             }
+            // Add tag to the set element in the policy template
+            $term_elements[] = "<".$tag_name.(count($attrs) > 0 ? " ".implode(" ", $attrs):"").">".$tag_value."</".$tag_name.">";
           }
-          // Add tag to the set element in the policy template
-          $term_elements[] = "<".$tag_name.(count($attrs) > 0 ? " ".implode(" ", $attrs):"").">".$tag_value."</".$tag_name.">";
+          // Close set element in the policy template
+          $term_elements[] = "</set>";
+          // There can be only one set element
+          break;
         }
-        // Close set element in the policy template
-        $term_elements[] = "</set>";
-        // There can be only one set element
-        break;
       }
 
       // If term is not empty ...
@@ -500,7 +513,10 @@ function update_template($autotemplate, &$statusmsg="")
         $policy_elements[] = "<term id=\"".$term_id."\" action=\"".$term_action."\">";
         $policy_elements[] = implode("\n", $term_elements);
         $policy_elements[] = "</term>";
-      } else
+      // Otherwise, if term doesn't contain
+      // failed <auto-prefix-list> tags ...
+      } elseif($auto_prefix_list_count < 1)
+        // ... add term specifying only the action
         $policy_elements[] = "<term id=\"".$term_id."\" action=\"".$term_action."\"/>";
 
     }
