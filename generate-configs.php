@@ -19,6 +19,7 @@
 
 */
 
+
 function usage()
 {
   echo("Usage: ".basename(realpath(__FILE__))." [--help|-h] [--before|-b <date>] [--after|-a <date>] <platform> <config_type> [template_id1,template_id2,...]\n");
@@ -32,6 +33,12 @@ $config = array('base_dir' => dirname(realpath(__FILE__)));
 include $config['base_dir']."/config.php";
 // Load common code library
 include $config['includes_dir']."/functions.inc.php";
+
+// Unless debugging is enabled ...
+if(!isset($config['debug']) ||
+   $config['debug'] === FALSE)
+  // ... suppress PHP messages
+  error_reporting(~E_ALL);
 
 // Set the default time zone
 date_default_timezone_set(empty($config['timezone']) ? 'UTC':$config['timezone']);

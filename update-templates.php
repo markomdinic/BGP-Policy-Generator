@@ -33,6 +33,12 @@ include $config['base_dir']."/config.php";
 // Load common code library
 include $config['includes_dir']."/functions.inc.php";
 
+// Unless debugging is enabled ...
+if(!isset($config['debug']) ||
+   $config['debug'] === FALSE)
+  // ... supress PHP messages
+  error_reporting(~E_ALL);
+
 // Set the default time zone
 date_default_timezone_set(empty($config['timezone']) ? 'UTC':$config['timezone']);
 

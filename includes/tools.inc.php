@@ -64,6 +64,30 @@ function status_message($msg, &$log)
   return $msg;
 }
 
+function is_sequential_array(&$array)
+{
+  if(!is_array($array))
+    return false;
+
+  return array_keys($array) === range(0, count($array)-1);
+}
+
+function is_associative_array(&$array)
+{
+  if(!is_array($array))
+    return false;
+
+  return array_keys($array) !== range(0, count($array)-1);
+}
+
+function is_rpsl_object(&$object)
+{
+  if(!is_array($object))
+    return false;
+
+  return array_keys($object) !== range(0, count($object)-1);
+}
+
 function is_name($names)
 {
   if(empty($names))

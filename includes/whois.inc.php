@@ -113,7 +113,7 @@ function whois_request($query)
     }
     // Socket ready ?
     if($ready > 0) {
-      // Write a query chunk up to 1 MB in size
+      // Write a query chunk
       $written = socket_write($sock, substr($query, $sent), 1048576);
       // On error - abort
       if($written === FALSE) {
@@ -144,7 +144,7 @@ function whois_request($query)
     }
     // Socket ready ?
     if($ready > 0) {
-      // Read a response chunk up to 1 MB in size
+      // Read a response chunk
       $chunk = socket_read($sock, 1048576);
       // On error - abort
       if($chunk === FALSE) {
@@ -203,7 +203,7 @@ function query_whois($search, $type=NULL, $attr=NULL)
 
   // Serialize search array without using implode().
   // It can exceede allowed memory for large queries.
-  foreach($search as $obj)
+  foreach(array_unique($search) as $obj)
     $search_string .= $query.$obj."\n";
 
   // Query whois server
@@ -225,7 +225,26 @@ function query_whois($search, $type=NULL, $attr=NULL)
 
     // Object ends on an empty line
     if(empty($line)) {
-      unset($key, $attr, $value, $skip);
+      // If object and it's primary key are defined ...
+      if(!empty($key) && !empty($object)) {
+        // If object already exists in the list ...
+        if(isset($objects[$key])) {
+          // ... and is already an array ...
+          if(is_sequential_array($objects[$key]))
+            // ... add it along with other objects
+            // with the same primary/lookup key
+            $objects[$key][] = $object;
+          // Otherwise, convert list entry to array ...
+          else
+            // ... containing both existing and the new object
+            $objects[$key] = array($objects[$key], $object);
+        // If object isn't in the list ...
+        } else
+          // ... just add it
+          $objects[$key] = $object;
+      }
+      // Reset per-object variables
+      unset($object, $key, $attr, $value, $skip);
       continue;
     }
 
@@ -261,36 +280,35 @@ function query_whois($search, $type=NULL, $attr=NULL)
       }
 
       // If no object is currently in construction ...
-      if(!isset($key)) {
+      if(empty($object)) {
         // If specific attribute was requested,
-        // but doesn't match the object type,
-        // or object isn't unique ...
-        if((!empty($type) && $type != $attr) ||
-           isset($objects[$value])) {
+        // but doesn't match the object type ...
+        if(!empty($type) && $type != $attr) {
           // ... skip it
           $skip = true;
           continue;
         }
-        // If all went well, set new object key,
-        // beginning a new object construction
+        // If all went well, start a new object
+        // and remember object's primary key
+        $object = array();
         $key = $value;
       }
 
       // Store RPSL object
-      if(isset($key)) {
+      if(is_array($object)) {
         // If attribute already exists ...
-        if(isset($objects[$key][$attr])) {
+        if(isset($object[$attr])) {
           // ... and is already an array ...
-          if(is_array($objects[$key][$attr]))
+          if(is_array($object[$attr]))
             // ... add value along with others
-            $objects[$key][$attr][] = $value;
+            $object[$attr][] = $value;
           // Otherwise, convert it to array ...
           else
             // ... which will hold previous and current value
-            $objects[$key][$attr] = array($objects[$key][$attr], $value);
+            $object[$attr] = array($object[$attr], $value);
         // If attribute doesn't exist, create it
         } else
-          $objects[$key][$attr] = $value;
+          $object[$attr] = $value;
       }
 
     // Line is a continuation of previous line(s) ?
@@ -299,16 +317,16 @@ function query_whois($search, $type=NULL, $attr=NULL)
       // Match should be a part of multiline value
       $value = $m[1];
       // Store RPSL object
-      if(isset($key)) {
+      if(!empty($object) && is_array($object)) {
         // If attribute is an array ...
-        if(is_array($objects[$key][$attr])) {
-          $last = count($objects[$key][$attr]) - 1;
+        if(is_array($object[$attr])) {
+          $last = count($object[$attr]) - 1;
           // ... append to the last stored value
-          $objects[$key][$attr][$last] .= $value;
+          $object[$attr][$last] .= $value;
         // Otherwise, if attribute holds a single value ...
         } else
           // ... simply append to it
-          $objects[$key][$attr] .= $value;
+          $object[$attr] .= $value;
       }
 
     }
@@ -322,30 +340,33 @@ function query_whois($search, $type=NULL, $attr=NULL)
 
 function aut_num($asn)
 {
+  // Don't waste time ...
+  if(empty($asn))
+    return;
+
   // Uppercase the ASN
   $asn = strtoupper($asn);
 
-  // Fetch AS data
-  $object = query_whois($asn, 'aut-num');
-  if(!is_array($object) || count($object) == 0 ||
-     !is_array($object[$asn]) || count($object[$asn]) == 0)
+  // Fetch aut-num object
+  $res = query_whois($asn, 'aut-num');
+  if(empty($res) || !is_rpsl_object($res[$asn]))
     return;
 
-  // Uppercase found object keys
-  $object = array_change_key_case($object, CASE_UPPER);
+  // This is our raw aut-num object
+  $object = $res[$asn];
 
   // Copy basic aut-num object attributes
   // (only the important ones)
   $aut_num = array(
     'aut-num' => $asn,
-    'as-name' => strtoupper($object[$asn]['as-name'])
+    'as-name' => strtoupper($object['as-name'])
   );
 
   // Copy import attribute(s)
-  if(isset($object[$asn]['import'])) {
-    $imports = is_array($object[$asn]['import']) ?
-                  $object[$asn]['import']:
-                  array($object[$asn]['import']);
+  if(isset($object['import'])) {
+    $imports = is_array($object['import']) ?
+                  $object['import']:
+                  array($object['import']);
     foreach($imports as $import) {
       // Extract ASN we are importing from
       if(preg_match('/from\s+([^\s:;#]+)/i', $import, $m))
@@ -368,10 +389,10 @@ function aut_num($asn)
     }
   }
   // Copy export attribute(s)
-  if(isset($object[$asn]['export'])) {
-    $exports = is_array($object[$asn]['export']) ?
-                  $object[$asn]['export']:
-                  array($object[$asn]['export']);
+  if(isset($object['export'])) {
+    $exports = is_array($object['export']) ?
+                  $object['export']:
+                  array($object['export']);
     foreach($exports as $export) {
       // Extract ASN we are exporting to
       if(preg_match('/to\s+([^\s:;#]+)/i', $export, $m))
@@ -394,10 +415,10 @@ function aut_num($asn)
     }
   }
   // Copy mp-import attribute(s)
-  if(isset($object[$asn]['mp-import'])) {
-    $imports = is_array($object[$asn]['mp-import']) ?
-                  $object[$asn]['mp-import']:
-                  array($object[$asn]['mp-import']);
+  if(isset($object['mp-import'])) {
+    $imports = is_array($object['mp-import']) ?
+                  $object['mp-import']:
+                  array($object['mp-import']);
     foreach($imports as $import) {
       // Extract ASN we are importing from
       if(preg_match('/from\s+([^\s:;#]+)/i', $import, $m))
@@ -420,10 +441,10 @@ function aut_num($asn)
     }
   }
   // Copy mp-export attribute(s)
-  if(isset($object[$asn]['mp-export'])) {
-    $exports = is_array($object[$asn]['mp-export']) ?
-                  $object[$asn]['mp-export']:
-                  array($object[$asn]['mp-export']);
+  if(isset($object['mp-export'])) {
+    $exports = is_array($object['mp-export']) ?
+                  $object['mp-export']:
+                  array($object['mp-export']);
     foreach($exports as $export) {
       // Extract ASN we are exporting to
       if(preg_match('/to\s+([^\s:;#]+)/i', $export, $m))
@@ -451,7 +472,7 @@ function aut_num($asn)
 
 function as_set($as_set_name)
 {
-  // Don't waste time
+  // Don't waste time ...
   if(empty($as_set_name))
     return;
 
@@ -794,18 +815,25 @@ function get_announced_ipv4_prefixes($from_asn, $to_asn)
               query_whois($exported, 'route'):
               query_whois($exported, 'route', 'origin');
 
-  foreach($routes as $prefix => $route) {
-    // Route object must have the origin attribute
-    if(empty($route['origin']))
-      continue;
-    // Make sure origin AS is uppercase
-    $asn = strtoupper($route['origin']);
-    // Skip prefix if originated by target ASN.
-    // No point exporting it to itself.
-    if($asn == $to_asn)
-      continue;
-    // Store prefixes into announced list
-    $announced[$asn][] = $prefix;
+  foreach($routes as $prefix => $objects) {
+    // Make sure this is always an array even
+    // if it contains a single route object
+    if(is_rpsl_object($objects))
+      $objects = array($objects);
+    // Process route objects
+    foreach($objects as $route) {
+      // Route object must have the origin attribute
+      if(empty($route['origin']))
+        continue;
+      // Make sure origin AS is uppercase
+      $asn = strtoupper($route['origin']);
+      // Skip prefix if originated by target ASN.
+      // No point exporting it to itself.
+      if($asn == $to_asn)
+        continue;
+      // Store prefixes into announced list
+      $announced[$asn][] = $prefix;
+    }
   }
 
   return $announced;
@@ -826,24 +854,31 @@ function get_announced_ipv6_prefixes($from_asn, $to_asn)
 
   $announced = array();
 
-  // Retrieve route objects. Exports can either be
+  // Retrieve route6 objects. Exports can either be
   // a list of IPv6 prefixes or a list of AS numbers
   $routes = is_ipv6($exported) ? 
               query_whois($exported, 'route6'):
               query_whois($exported, 'route6', 'origin');
 
-  foreach($routes as $prefix => $route) {
-    // Route object must have the origin attribute
-    if(empty($route['origin']))
-      continue;
-    // Make sure origin AS is uppercase
-    $asn = strtoupper($route['origin']);
-    // Skip prefix if originated by target ASN.
-    // No point exporting it to itself.
-    if($asn == $to_asn)
-      continue;
-    // Store prefixes into announced list
-    $announced[$asn][] = $prefix;
+  foreach($routes as $prefix => $objects) {
+    // Make sure this is always an array even
+    // if it contains a single route object
+    if(is_rpsl_object($objects))
+      $objects = array($objects);
+    // Process route6 objects
+    foreach($objects as $route6) {
+      // Route6 object must have the origin attribute
+      if(empty($route6['origin']))
+        continue;
+      // Make sure origin AS is uppercase
+      $asn = strtoupper($route6['origin']);
+      // Skip prefix if originated by target ASN.
+      // No point exporting it to itself.
+      if($asn == $to_asn)
+        continue;
+      // Store prefixes into announced list
+      $announced[$asn][] = $prefix;
+    }
   }
 
   return $announced;
