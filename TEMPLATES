@@ -420,3 +420,38 @@ So, this tag's effect is two-fold:
 Using regular expressions to select prefixes by several criteria makes it possible to
 divide generated prefixes between terms, should some of them be treated differently
 than others.
+
+Tags <term>, <match> and <set> take optional attribute 'ignore-missing' which controls
+how the section behaves when some or all of it's elements are missing. By default,
+if <match> section contains <auto-prefix-list> tag(s), generated template's <match>
+section must end up with <prefix-list> tags produced by <auto-prefix-list>. If no prefix
+list is produced, <match> section is missing one or more match conditions which changes
+the behavior of the term. This may be undesirable, so when no prefix lists are generated
+in place of <auto-prefix-list> tags, the entire <match> is invalidated, and, in turn,
+the entire <term> and therefore they will not be generated.
+
+To be more precise, if term action is 'permit', missing match section usually means
+everything is implicitly allowed, which may be dangerous as it may unintentionally
+accept full BGP feed from an undesired source and mess up our routing. In contrast,
+when term action is 'deny', missing match section will usually mean - deny everything,
+which may not be what we intended, but it is safe.
+
+To change this default conservative/safe behavior, 'ignore-missing' tag attribute was
+introduced. Using this attribute on 3 different levels allows for fine-grained control
+of template generation:
+
+ - When used in <match> tag, ignore-missing="yes" will allow <auto-prefix-list> tags
+   to fail without removing entire <match> section (and subsequently the entire <term>).
+
+ - When used in <set> tag, ignore-missing="yes" will allow <set> section to be generated
+   even if <match> section is removed due to the <auto-prefix-list> failure.
+
+ - When used in <term> tag. ignore-missing="yes" will allow <term> to be generated
+   empty (term action is always there, tho) even if <match> section is removed due to
+   the <auto-prefix-list> failure.
+
+It is important to note that this pertains only to cases in which automatic prefix
+generation is involved. You can manually define your templates any way you like
+without using any special features. Also, any manually defined <match> section or
+the entire <term> won't be affected by autopolicy behavior in other sections of
+the same template.

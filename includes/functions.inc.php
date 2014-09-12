@@ -233,6 +233,21 @@ function update_template($autotemplate, &$statusmsg="")
           continue 3;
       }
 
+      // This optional attribute, if set to "yes",
+      // tells us to ignore missing term sections
+      // and allow empty terms unconditionally
+      switch($term->getAttribute('ignore-missing')) {
+        case 'true':
+        case 'yes':
+        case 'on':
+        case '1':
+          $term_ignore_missing = true;
+          break;
+        default:
+          $term_ignore_missing = false;
+          break;
+      }
+
       // This variable will hold the number
       // of <auto-prefix-list> tags specified
       // within this term's <match> element
@@ -244,6 +259,21 @@ function update_template($autotemplate, &$statusmsg="")
 
       // Process match element inside current term
       foreach($term->getElementsByTagName('match') as $match) {
+
+        // This optional attribute, if set to "yes",
+        // tells us to ignore missing match conditions
+        // even if that changes the term's semantics
+        switch($match->getAttribute('ignore-missing')) {
+          case 'true':
+          case 'yes':
+          case 'on':
+          case '1':
+            $match_ignore_missing = true;
+            break;
+          default:
+            $match_ignore_missing = false;
+            break;
+        }
 
         // This array will receive prefix list tags
         // built as strings in XML format
@@ -266,7 +296,10 @@ function update_template($autotemplate, &$statusmsg="")
               break;
           }
 
-          // Get the include flag, if defined
+          // Get the include flag, if defined.
+          // It will be copied to generated
+          // <prefix-list> tags, thus it is
+          // not a boolean flag, but a string.
           switch($p->getAttribute('include')) {
             case 'true':
             case 'yes':
@@ -425,11 +458,14 @@ function update_template($autotemplate, &$statusmsg="")
         // contained inside current <match> element
         $auto_prefix_list_count = $prefix_lists->length;
 
-        // Copy the rest of match conditions unless
-        // <match> contains <auto-prefix-list> tags
-        // that produced no prefix lists, thus making
-        // the <match> section invalid
-        if($auto_prefix_list_count < 1 || count($match_elements) > 0) {
+        // Copy the rest of match conditions unless <match>
+        // contains <auto-prefix-list> tags that produced
+        // no prefix lists, thus making the <match> section
+        // invalid, or if explicitly told to ignore missing
+        // match conditions
+        if($match_ignore_missing ||
+           $auto_prefix_list_count < 1 ||
+           count($match_elements) > 0) {
           // Begin match element in the policy template
           $term_elements[] = "<match>";
           // If match conditions are present,
@@ -466,14 +502,31 @@ function update_template($autotemplate, &$statusmsg="")
         break;
       }
 
-      // Copy all set statements unless <match> contains
-      // <auto-prefix-list> tags that produced no prefix
-      // lists, thus making the <match> section invalid
-      // and, in turn, the entire <term>, which makes
-      // the <set> section unneccessary
-      if($auto_prefix_list_count < 1 || count($term_elements) > 0) {
-        // Process set element inside current term
-        foreach($term->getElementsByTagName('set') as $set) {
+      // Process set element inside current term
+      foreach($term->getElementsByTagName('set') as $set) {
+        // This optional attribute, if set to "yes",
+        // tells us to ignore the missing match section
+        // and create the set section unconditionally
+        switch($set->getAttribute('ignore-missing')) {
+          case 'true':
+          case 'yes':
+          case 'on':
+          case '1':
+            $set_ignore_missing = true;
+            break;
+          default:
+            $set_ignore_missing = false;
+            break;
+        }
+        // Copy all set statements unless <match> contains
+        // <auto-prefix-list> tags that produced no prefix
+        // lists, thus making the <match> section invalid
+        // and, in turn, the entire <term>, which makes
+        // the set section unneccessary, unless explicitly
+        // configured to ignore the missing match section
+        if($set_ignore_missing ||
+           $auto_prefix_list_count < 1 ||
+           count($term_elements) > 0) {
           // Begin set element in the policy template
           $term_elements[] = "<set>";
           // Copy all set statements within the set element
@@ -502,10 +555,34 @@ function update_template($autotemplate, &$statusmsg="")
           }
           // Close set element in the policy template
           $term_elements[] = "</set>";
-          // There can be only one set element
-          break;
         }
+        // There can be only one set element
+        break;
       }
+
+      // Empty term must not contain failed <auto-prefix-list> tags
+      // if term action is 'permit'. It's safer to be conservative
+      // here, because 'permit' term without match conditions usually
+      // implicitly permits everything, so if we are missing a match
+      // section because <auto-prefix-list> failed to produce match
+      // conditions, we don't want to let everything in, considering
+      // it might unintentionally accept full BGP feed from an unwanted
+      // source and mess up our routing. If the match section contains
+      // match conditions other than those specified by the failed
+      // <auto-prefix-list> tag, the term with less match conditions
+      // will match less and, in turn, 'permit' action will pass less
+      // through, which may not be what we intended, but it is safer.
+      //
+      // On the other hand, if term action is 'deny', missing match
+      // section will usually implicitly deny everything, which also
+      // may not be what we intended, but it's still safer.
+      //
+      // By default, we will be conservative, thus allowing empty terms
+      // only if they were configured that way by hand or term action is
+      // set to 'deny'. To change that behavior, we use term attribute
+      // ignore-missing, which will explicitly allow empty terms even
+      // if term action is set to 'permit' and match section is missing
+      // for whatever reason.
 
       // If term is not empty ...
       if(count($term_elements) > 0) {
@@ -513,9 +590,12 @@ function update_template($autotemplate, &$statusmsg="")
         $policy_elements[] = "<term id=\"".$term_id."\" action=\"".$term_action."\">";
         $policy_elements[] = implode("\n", $term_elements);
         $policy_elements[] = "</term>";
-      // Otherwise, if term doesn't contain
-      // failed <auto-prefix-list> tags ...
-      } elseif($auto_prefix_list_count < 1)
+      // If empty term is configured to ignore missing sections,
+      // or it contains no failed <auto-prefix-list> tags,
+      // or term action is 'deny', it is generally ok, so ...
+      } elseif($term_ignore_missing ||
+               $auto_prefix_list_count < 1 ||
+               $term_action == "deny")
         // ... add term specifying only the action
         $policy_elements[] = "<term id=\"".$term_id."\" action=\"".$term_action."\"/>";
 
