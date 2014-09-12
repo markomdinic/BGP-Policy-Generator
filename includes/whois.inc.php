@@ -22,241 +22,293 @@ include_once $config['includes_dir'].'/tools.inc.php';
 
 // ************************ LOW LEVEL WHOIS FUNCTIONS *************************
 
-function whois_connect($server, $port=NULL, $timeout=NULL, $delay=NULL)
+function whois_request($query)
 {
   global $config;
 
   // Don't waste my time
-  if(empty($server))
+  if(empty($query) || empty($config['whois_server']))
     return;
 
-  // Set default parameters
-  if(!isset($port))
-    $port = $config['whois_port'];
-  if(!isset($timeout))
-    $timeout = $config['whois_timeout'];
-  if(!isset($delay))
-    $delay=$config['whois_delay'];
+  // Whois server
+  // (mandatory)
+  $host = (is_ipv4($config['whois_server']) ||
+           is_ipv6($config['whois_server'])) ?
+              $config['whois_server']:
+              gethostbyname($config['whois_server']);
 
-  // Resolve RIS whois server host
-  $host = gethostbyname($server);
+  if(empty($host))
+    return;
+
+  // Whois TCP port
+  // (default: 43)
+  $port = (!empty($config['whois_port'])) ?
+              $config['whois_port']:43;
+
+  // Socket operations (connect/read/write) timeout
+  // (default: 5 seconds)
+  $socket_timeout = (!empty($config['whois_sock_timeout'])) ?
+                        $config['whois_sock_timeout']:5;
+
+  // Query timeout (max time single query can last)
+  // (default: 300 seconds)
+  $query_timeout = (!empty($config['whois_query_timeout'])) ?
+                       $config['whois_query_timeout']:300;
 
   // Create a new socket
-  $sock = stream_socket_client("tcp://".$host.":".$port, $errno, $errstr, $timeout);
+  $sock = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
   if($sock === FALSE)
     return;
 
-  // Set stream to non-blocking
-  stream_set_blocking($sock, 0);
-  // Set stream delay timeout
-  stream_set_timeout($sock, $delay);
+  // Set socket to non-blocking mode
+  socket_set_nonblock($sock);
 
-  return $sock;
-}
+  // Connect to the whois server
+  $connect_timeout = time() + $socket_timeout;
+  while(socket_connect($sock, $host, $port) === FALSE) {
+    switch(socket_last_error($sock)) {
+      // EALREADY
+      case 114:
+      // EINPROGRESS
+      case 115:
+        // On connect timeout, abort
+        if(time() > $connect_timeout) {
+          socket_close($sock);
+          return;
+        }
+        sleep(1);
+        break;
+      // On other errors, abort
+      default:
+        socket_close($sock);
+        return;
+    }
+  }
 
-function whois_request($sock, $query, $timeout=NULL)
-{
-  global $config;
+  // Set socket operations timeout
+  $timeout = array('sec' => $socket_timeout, 'usec' => 0);
+  socket_set_option($sock, SOL_SOCKET, SO_SNDTIMEO, $timeout);
+  socket_set_option($sock, SOL_SOCKET, SO_RCVTIMEO, $timeout);
 
-  // Don't waste my time
-  if(!isset($sock) || empty($query))
+  // Open persistent mode
+  if(socket_write($sock, "-k\n") === FALSE) {
+    socket_close($sock);
     return;
+  }
 
-  // Set default timeout if not given explicitly
-  if(!isset($timeout))
-    $timeout = $config['whois_timeout'];
+  // Query cannot last beyond this time
+  $query_deadline = time() + $query_timeout;
 
-  // Execute whois query
-  fwrite($sock, $query);
+  // Send query
+  for($sent = 0, $size = strlen($query); $sent < $size; $sent += $written) {
+    $wsock = array($sock);
+    $null = NULL;
+    // Wait for socket to become ready
+    // for writing one second at a time
+    $ready = socket_select($null, $wsock, $null, 1);
+    // Error ?
+    if($ready === FALSE) {
+      socket_close($sock);
+      return;
+    }
+    // Socket ready ?
+    if($ready > 0) {
+      // Write a query chunk up to 1 MB in size
+      $written = socket_write($sock, substr($query, $sent), 1048576);
+      // On error - abort
+      if($written === FALSE) {
+        socket_close($sock);
+        return;
+      }
+    } else {
+      // On timeout, abort
+      if(time() > $query_deadline)
+        return;
+    }
+  }
 
+  // Now we wait for response
   $response = '';
 
-  // Read operation cannot last beyond this timestamp
-  $expire_timestamp = time() + $timeout;
-  // Read response until EOF or timeout
-  while(!feof($sock)) {
-     // If timed out, abort
-     if(time() > $expire_timestamp)
-       break;
-     // Get a piece of response
-     $chunk = fgets($sock, 128);
-     // Append piece to the receive buffer
-     if(!empty($chunk))
-       $response .= $chunk;
+  // Read response
+  while(time() < $query_deadline) {
+    $rsock = array($sock);
+    $null = NULL;
+    // Wait for socket to become ready
+    // for reading one second at a time
+     $ready = socket_select($rsock, $null, $null, 1);
+    // Error ?
+    if($ready === FALSE) {
+      socket_close($sock);
+      return;
+    }
+    // Socket ready ?
+    if($ready > 0) {
+      // Read a response chunk up to 1 MB in size
+      $chunk = socket_read($sock, 1048576);
+      // On error - abort
+      if($chunk === FALSE) {
+        socket_close($sock);
+        return;
+      }
+      // If we got nothing, we are done
+      if(empty($chunk))
+        break;
+      // Append chunk to the receive buffer
+      $response .= $chunk;
+    // If socket was idle ...
+    } else
+      // ... close persistent mode
+      socket_write($sock, "-k\n");
   }
 
   // Close connection
-  fclose($sock);
+  socket_close($sock);
 
   return $response;
 }
 
 // **************************** QUERY FUNCTIONS *******************************
 
-function query_ris($query, $type=NULL)
+function query_whois($search, $type=NULL, $attr=NULL)
 {
   global $config;
 
   // Don't waste my time ...
-  if(empty($query))
+  if(empty($search))
     return;
 
-  // Connect to RIPE RIS server
-  $sock = whois_connect($config['whois_ris_server']);
-  if(!isset($sock))
-    return;
-
-  // Query RIS server
-  // -k   request persistant connection for bulk queries
-  // -F   request short format response
-  $response = whois_request($sock, "-k -F\n".implode("\n", $query)."\n-k\n");
-
-  $prefixes = array();
-
-  // Parse raw output
-  foreach(explode("\n", $response) as $line) {
-
-    // Skip comments
-    if(preg_match('/^\s*%/', $line))
-      continue;
-
-    // Looking for "<asn> <prefix> ..." line
-    if(preg_match('/^\s*(?:AS)?(\d+)\s+(\S+)\s+/i', $line, $m)) {
-
-      // Matching data are ASN and originated prefix
-      $asn = 'AS'.$m[1];
-      $prefix = $m[2];
-
-      // Specific type requested ?
-      if(!empty($type)) {
-        switch($type) {
-          case 'route':
-            if(!is_ipv4($prefix))
-              unset($prefix);
-            break;
-          case 'route6':
-            if(!is_ipv6($prefix))
-              unset($prefix);
-            break;
-          default:
-            return;
-        }
-      }
-
-      if(!empty($prefix))
-        // Store extracted prefix
-        $prefixes[$asn][] = $prefix;
-    }
-
-  }
-
-  return $prefixes;
-}
-
-function query_whois($query, $type=NULL, $attr=NULL)
-{
-  global $config;
-
-  // Don't waste my time ...
-  if(empty($query))
-    return;
-
-  // Connect to RIPE RIS server
-  $sock = whois_connect($config['whois_server']);
-  if(!isset($sock))
-    return;
-
+  //
   // Leave out contact info
   // to avoid daily limit ban:
   //
   //   http://www.ripe.net/data-tools/db/faq/faq-db/why-did-you-receive-the-error-201-access-denied
   //
-  $command = "-r";
+  $query = '-r';
   // Preferred object type
   if(!empty($type))
-    $command .= " -T".$type;
+    $query .= ' -T'.$type;
   // Inverse lookup by this attribute
   if(!empty($attr))
-    $command .= " -i".$attr;
-  // Append query string
-  // and finalize command
-  $command .= " ".$query."\n";
+    $query .= ' -i'.$attr;
+  // Finalize query parameters
+  $query .= ' ';
 
-  // Query RIS server
-  // -k   request persistant connection for bulk queries
-  // -F   request short format response
-  $response = whois_request($sock, $command);
+  // Make sure search is always an array
+  // even if it contains a single element
+  if(!is_array($search))
+    $search = array($search);
+
+  $search_string = '';
+
+  // Serialize search array without using implode().
+  // It can exceede allowed memory for large queries.
+  foreach($search as $obj)
+    $search_string .= $query.$obj."\n";
+
+  // Query whois server
+  $response = whois_request($search_string);
+
+  // Got nothing - aborting
   if(empty($response))
     return;
 
+  // Parsed objects go here
   $objects = array();
-  $attr = NULL;
-  $value = NULL;
 
-  // Parse raw output
-  foreach(explode("\n", $response) as $line) {
+  // What ? explode() you say ? Well, duh ...
+  // Try it on a really large response !
+  for($o = 0; ($n = strpos($response, "\n", $o)) !== FALSE; $o = $n + 1) {
+
+    // Extract current line
+    $line = substr($response, $o, $n - $o);
+
+    // Object ends on an empty line
+    if(empty($line)) {
+      unset($key, $attr, $value, $skip);
+      continue;
+    }
+
+    // Some part of this processing loop determined
+    // that current object should be skipped ...
+    if(isset($skip) && $skip == TRUE)
+      continue;
 
     // Skip comments
     if(preg_match('/^\s*%/', $line))
       continue;
 
-    // Object ends with an empty line
-    if(empty($line)) {
-      unset($object_key);
-      continue;
-    }
-
     // Looking for "attribute: value" line
     if(preg_match('/^\s*([^\s:]+):\s*(.*)/i', $line, $m)) {
-
-      // Matching data are attribute name and it's value
-      $attr = $m[1];
-      $value = $m[2];
-      // If specific attribute was requested ...
-      if(isset($type)) {
-        // ... and we found it in the current line,
-        // use it as the key in the array of results
-        if($attr == $type)
-          $object_key = $value;
-      // Otherwise, if no specific attributes were requested ...
-      } else {
-        // ... use the first attribute we come across as key
-        if(!isset($object_key))
-          $object_key = $value;
+      // Skip unused attributes
+      switch($m[1]) {
+        case 'descr':
+        case 'remarks':
+        case 'mnt-by':
+        case 'mnt-ref':
+        case 'mnt-lower':
+        case 'mnt-routes':
+        case 'admin-c':
+        case 'tech-c':
+        case 'source':
+        case 'org':
+          unset($attr);
+          continue 2;
+        default:
+          $attr = $m[1];
+          $value = $m[2];
+          break;
       }
+
+      // If no object is currently in construction ...
+      if(!isset($key)) {
+        // If specific attribute was requested,
+        // but doesn't match the object type,
+        // or object isn't unique ...
+        if((!empty($type) && $type != $attr) ||
+           isset($objects[$value])) {
+          // ... skip it
+          $skip = true;
+          continue;
+        }
+        // If all went well, set new object key,
+        // beginning a new object construction
+        $key = $value;
+      }
+
       // Store RPSL object
-      if(isset($object_key)) {
+      if(isset($key)) {
         // If attribute already exists ...
-        if(isset($objects[$object_key][$attr])) {
+        if(isset($objects[$key][$attr])) {
           // ... and is already an array ...
-          if(is_array($objects[$object_key][$attr]))
+          if(is_array($objects[$key][$attr]))
             // ... add value along with others
-            $objects[$object_key][$attr][] = $value;
+            $objects[$key][$attr][] = $value;
           // Otherwise, convert it to array ...
           else
             // ... which will hold previous and current value
-            $objects[$object_key][$attr] = array($objects[$object_key][$attr], $value);
+            $objects[$key][$attr] = array($objects[$key][$attr], $value);
         // If attribute doesn't exist, create it
         } else
-          $objects[$object_key][$attr] = $value;
+          $objects[$key][$attr] = $value;
       }
 
-    // Line is a continuation of prefious line(s) ?
-    } elseif(preg_match('/^\s*(.+)/i', $line, $m)) {
+    // Line is a continuation of previous line(s) ?
+    } elseif(!empty($attr) && preg_match('/^\s*(.+)/i', $line, $m)) {
 
       // Match should be a part of multiline value
       $value = $m[1];
       // Store RPSL object
-      if(isset($object_key)) {
+      if(isset($key)) {
         // If attribute is an array ...
-        if(is_array($objects[$object_key][$attr])) {
-          $last = count($objects[$object_key][$attr]) - 1;
+        if(is_array($objects[$key][$attr])) {
+          $last = count($objects[$key][$attr]) - 1;
           // ... append to the last stored value
-          $objects[$object_key][$attr][$last] .= $value;
+          $objects[$key][$attr][$last] .= $value;
         // Otherwise, if attribute holds a single value ...
         } else
           // ... simply append to it
-          $objects[$object_key][$attr] .= $value;
+          $objects[$key][$attr] .= $value;
       }
 
     }
@@ -397,250 +449,240 @@ function aut_num($asn)
   return $aut_num;
 }
 
-function as_set($as_set_name, &$members=array(), &$expanded=array())
+function as_set($as_set_name)
 {
-  // Uppercase the AS set name
+  // Don't waste time
+  if(empty($as_set_name))
+    return;
+
+  // We always use uppercase names
   $as_set_name = strtoupper($as_set_name);
 
-  // If already expanded, abort
-  if(isset($expanded[$as_set_name]))
-    return;
+  // This will hold all expanded member ASNs
+  $as_set_members = array();
 
-  // Set ourselves as expanded to prevent
-  // AS-set loops when called recursively
-  $expanded[$as_set_name] = true;
+  // Add ourselves to the expansion list
+  $expand_as_sets = array($as_set_name => true);
+  // Set ourselves as already expanded
+  $already_expanded = array($as_set_name => true);
 
-  // Fetch AS set data
-  $object = query_whois($as_set_name, 'as-set');
-  if(!isset($object) || !is_array($object))
-    return;
+  // Do the deep expansion of this AS set
+  while(!empty($expand_as_sets)) {
 
-  // Uppercase found object's keys
-  $object = array_change_key_case($object, CASE_UPPER);
+    // Fetch AS sets
+    $as_sets = query_whois(array_keys($expand_as_sets), 'as-set');
+    if(empty($as_sets))
+      break;
 
-  // Proper AS set object must have members attribute
-  if(!isset($object[$as_set_name]) ||
-     !isset($object[$as_set_name]['members']))
-    return;
+    // Begin with an empty list of AS sets to expand.
+    // This list will be used in the next iteration.
+    $expand_as_sets = array();
 
-  // Store basic as-set object attributes
-  // (only the important ones)
-  $as_set = array('as-set' => $as_set_name);
+    // Collect all members from all found AS set objects
+    foreach(array_values($as_sets) as $as_set) {
 
-  // Make sure we will be iterating
-  // over array of unique members
-  $raw_members = is_array($object[$as_set_name]['members']) ?
-                   array_unique($object[$as_set_name]['members']):
-                   array($object[$as_set_name]['members']);
-
-  // Recursively copy and expand member attributes
-  foreach($raw_members as $member) {
-    // Skip parsing errors
-    if(empty($member))
-      continue;
-    // String might contain comma-separated AS list
-    foreach(preg_split('/[,;:]/', strtoupper($member)) as $member) {
-      // Strip leading and trailing trash
-      if(!preg_match('/([^\s#]+)/', $member, $m))
+      // Proper AS set object must have members attribute(s)
+      if(empty($as_set) || empty($as_set['members']))
         continue;
-      $member = $m[1];
-      // If member is a simple ASN ...
-//      if(preg_match('/(AS\d+)/i', $member, $m))
-      if(is_asn($member))
-        // ... just store it along with the rest
-//        $members[$m[1]] = $m[1];
-        $members[$member] = $member;
-      // Otherwise, member should be an as-set ...
-      else
-        // Try to expand it
-        as_set($member, $members, $expanded);
+
+      // The list of unique members of current AS set
+      $members = is_array($as_set['members']) ?
+                   $as_set['members']:array($as_set['members']);
+
+      // Recursively copy and expand member attributes
+      foreach($members as $member) {
+        // Skip parsing errors
+        if(empty($member))
+          continue;
+        // String might contain comma-separated members list
+        foreach(preg_split('/[,;:]/', strtoupper($member)) as $member) {
+          // Strip leading and trailing trash
+          if(!preg_match('/([^\s#]+)/', $member, $m))
+            continue;
+          $member = $m[1];
+          // If member is a simple ASN ...
+          if(is_asn($member)) {
+            // ... just store it along with the rest
+            $as_set_members[$member] = true;
+          // Otherwise, member should be an AS set.
+          // So, unless already expanded ...
+          } elseif(!isset($already_expanded[$member])) {
+            // ... add it to the expansion list
+            $expand_as_sets[$member] = true;
+            // ... set it as expanded to prevent loops
+            $already_expanded[$member] = true;
+          }
+        }
+      }
     }
   }
 
-  // Store expanded members array
-  $as_set['members'] = $members;
+  // If our expanded AS set has no members ...
+  if(empty($as_set_members))
+    // ... return nothing
+    return;
 
-  return $as_set;
+  // Return expanded as-set
+  return array('as-set' => $as_set_name,
+               'members' => array_keys($as_set_members));
 }
 
-function route_set($route_set_name, &$members=array(), &$expanded=array())
+function route_set($route_set_name)
 {
-  // Uppercase the route set name
+  // Don't waste time
+  if(empty($route_set_name))
+    return;
+
+  // We always use uppercase names
   $route_set_name = strtoupper($route_set_name);
 
-  // If already expanded, abort
-  if(isset($expanded[$route_set_name]))
-    return;
+  // This will hold all expanded member prefixes
+  $route_set_members = array();
 
-  // Set ourselves as expanded to prevent
-  // route-set loops when called recursively
-  $expanded[$route_set_name] = true;
+  // Add ourselves to the expansion list
+  $expand_route_sets = array($route_set_name => true);
+  // Set ourselves as already expanded
+  $already_expanded = array($route_set_name => true);
 
-  // Fetch route set data
-  $object = query_whois($route_set_name, 'route-set');
-  if(!isset($object) || !is_array($object))
-    return;
+  // Do the deep expansion of this route set
+  while(!empty($expand_route_sets)) {
 
-  // Uppercase found object's keys
-  $object = array_change_key_case($object, CASE_UPPER);
+    // Fetch route sets
+    $route_sets = query_whois(array_keys($expand_route_sets), 'route-set');
+    if(empty($route_sets))
+      break;
 
-  // Proper route-set object must have members attribute
-  if(!isset($object[$route_set_name]) ||
-     !isset($object[$route_set_name]['members']))
-    return;
+    // Begin with an empty list of route sets to expand.
+    // This list will be used in the next iteration.
+    $expand_route_sets = array();
 
-  // Store basic route-set object attributes
-  // (only the important ones)
-  $route_set = array('route-set' => $route_set_name);
+    // Collect all members from all found route set objects
+    foreach(array_values($route_sets) as $route_set) {
 
-  // Make sure we will be iterating over array of unique members
-  $raw_members = is_array($object[$route_set_name]['members']) ?
-                   array_unique($object[$route_set_name]['members']):
-                   array($object[$route_set_name]['members']);
-
-  // Recursively copy and expand member attributes
-  foreach($raw_members as $member) {
-    // Skip parsing errors
-    if(empty($member))
-      continue;
-    // String might contain comma-separated list of members
-    foreach(preg_split('/(?:\^[^,\s]*)?\s*[,\s]\s*/', strtoupper($member)) as $member) {
-      // Strip leading and trailing trash
-      if(!preg_match('/([^\s#]+)/', $member, $m))
+      // Proper route set object must have members attribute(s)
+      if(empty($route_set) || empty($route_set['members']))
         continue;
-      $member = $m[1];
-      // If member is an IPv4 prefix ...
-      if(is_ipv4($member))
-        // ... just store it along with the rest
-        $members[$member] = $member;
-      // Otherwise, member should be a route-set ...
-      else
-        // Try to expand it
-        route_set($member, $members, $expanded);
+
+      // The list of unique members of current route set
+      $members = is_array($route_set['members']) ?
+                       array_unique($route_set['members']):
+                       array($route_set['members']);
+
+      // Recursively copy and expand member attributes
+      foreach($members as $member) {
+        // Skip parsing errors
+        if(empty($member))
+          continue;
+        // String might contain comma-separated members list
+        foreach(preg_split('/(?:\^[^,\s]*)?\s*[,\s]\s*/', strtoupper($member)) as $member) {
+          // Strip leading and trailing trash
+          if(!preg_match('/([^\s#]+)/', $member, $m))
+            continue;
+          $member = $m[1];
+          // If member is an IPv4 prefix ...
+          if(is_ipv4($member)) {
+            // ... just store it along with the rest
+            $route_set_members[$member] = true;
+          // Otherwise, member should be a route set.
+          // So, unless already expanded ...
+          } elseif(!isset($already_expanded[$member])) {
+            // ... add it to the expansion list
+            $expand_route_sets[$member] = true;
+            // ... set it as expanded to prevent loops
+            $already_expanded[$member] = true;
+          }
+        }
+      }
     }
   }
 
-  // Store expanded members array
-  $route_set['members'] = $members;
+  // If our expanded route set has no members ...
+  if(empty($route_set_members))
+    // ... return nothing
+    return;
 
-  return $route_set;
+  // Return expanded route-set
+  return array('route-set' => $route_set_name,
+               'members' => array_keys($route_set_members));
 }
 
-function route6_set($route_set_name, &$members=array(), &$expanded=array())
+function route6_set($route6_set_name)
 {
-  // Uppercase the route set name
-  $route_set_name = strtoupper($route_set_name);
-
-  // If already expanded, abort
-  if(isset($expanded[$route_set_name]))
+  // Don't waste time
+  if(empty($route6_set_name))
     return;
 
-  // Set ourselves as expanded to prevent
-  // route-set loops when called recursively
-  $expanded[$route_set_name] = true;
+  // We always use uppercase names
+  $route6_set_name = strtoupper($route6_set_name);
 
-  // Fetch route set data
-  $object = query_whois($route_set_name, 'route-set');
-  if(!isset($object) || !is_array($object))
-    return;
+  // This will hold all expanded member prefixes
+  $route6_set_members = array();
 
-  // Uppercase found object's keys
-  $object = array_change_key_case($object, CASE_UPPER);
+  // Add ourselves to the expansion list
+  $expand_route6_sets = array($route6_set_name => true);
+  // Set ourselves as already expanded
+  $already_expanded = array($route6_set_name => true);
 
-  // Proper route-set object must have mp-members attribute
-  if(!isset($object[$route_set_name]) ||
-     !isset($object[$route_set_name]['mp-members']))
-    return;
+  // Do the deep expansion of this route set
+  while(!empty($expand_route6_sets)) {
 
-  // Store basic route-set object attributes
-  // (only the important ones)
-  $route_set = array('route-set' => $route_set_name);
+    // Fetch route sets
+    $route6_sets = query_whois(array_keys($expand_route6_sets), 'route-set');
+    if(empty($route6_sets))
+      break;
 
-  // Make sure we will be iterating over array of unique mp-members
-  $raw_members = is_array($object[$route_set_name]['mp-members']) ?
-                   array_unique($object[$route_set_name]['mp-members']):
-                   array($object[$route_set_name]['mp-members']);
+    // Begin with an empty list of route sets to expand.
+    // This list will be used in the next iteration.
+    $expand_route6_sets = array();
 
-  // Recursively copy and expand member attributes
-  foreach($raw_members as $member) {
-    // Skip parsing errors
-    if(empty($member))
-      continue;
-    // String might contain comma-separated list of members
-    foreach(preg_split('/(?:\^[^,\s]*)?\s*[,\s]\s*/', strtoupper($member)) as $member) {
-      // Strip leading and trailing trash
-      if(!preg_match('/([^\s#]+)/', $member, $m))
+    // Collect all members from all found route set objects
+    foreach(array_values($route6_sets) as $route6_set) {
+
+      // Proper route set object must have members attribute(s)
+      if(empty($route6_set) || empty($route6_set['members']))
         continue;
-      $member = $m[1];
-      // If member is an IPv6 prefix ...
-      if(is_ipv6($member))
-        // ... just store it along with the rest
-        $members[$member] = $member;
-      // Otherwise, member should be a route-set ...
-      else
-        // Try to expand it
-        route6_set($member, $members, $expanded);
+
+      // The list of unique members of current route set
+      $members = is_array($route6_set['members']) ?
+                       array_unique($route6_set['members']):
+                       array($route6_set['members']);
+
+      // Recursively copy and expand member attributes
+      foreach($members as $member) {
+        // Skip parsing errors
+        if(empty($member))
+          continue;
+        // String might contain comma-separated members list
+        foreach(preg_split('/(?:\^[^,\s]*)?\s*[,\s]\s*/', strtoupper($member)) as $member) {
+          // Strip leading and trailing trash
+          if(!preg_match('/([^\s#]+)/', $member, $m))
+            continue;
+          $member = $m[1];
+          // If member is an IPv6 prefix ...
+          if(is_ipv6($member)) {
+            // ... just store it along with the rest
+            $route6_set_members[$member] = true;
+          // Otherwise, member should be a route set.
+          // So, unless already expanded ...
+          } elseif(!isset($already_expanded[$member])) {
+            // ... add it to the expansion list
+            $expand_route6_sets[$member] = true;
+            // ... set it as expanded to prevent loops
+            $already_expanded[$member] = true;
+          }
+        }
+      }
     }
   }
 
-  // Store expanded members array
-  $route_set['mp-members'] = $members;
-
-  return $route_set;
-}
-
-// ***************************** PREFIX FUNCTIONS *****************************
-
-function get_ipv4_prefixes_by_origin($asn)
-{
-  // Fetch route objects originated by this AS
-  $object = query_whois($asn, 'route', 'origin');
-  if(!isset($object) ||
-     !is_array($object) ||
-     count($object) == 0)
+  // If our expanded route set has no members ...
+  if(empty($route6_set_members))
+    // ... return nothing
     return;
 
-  return array_keys($object);
-}
-
-function get_ipv6_prefixes_by_origin($asn)
-{
-  // Fetch route objects originated by this AS
-  $object = query_whois($asn, 'route6', 'origin');
-  if(!isset($object) ||
-     !is_array($object) ||
-     count($object) == 0)
-    return;
-
-  return array_keys($object);
-}
-
-function get_ipv4_prefix_origin($prefix)
-{
-  // Fetch route object for these prefix
-  $object = query_whois($prefix, 'route');
-  if(!isset($object) ||
-     !is_array($object) ||
-     !isset($object[$prefix]) ||
-     !is_array($object[$prefix]) ||
-     empty($object[$prefix]['origin']))
-    return;
-
-  return $object[$prefix]['origin'];
-}
-
-function get_ipv6_prefix_origin($prefix)
-{
-  // Fetch route6 object for these prefix
-  $object = query_whois($prefix, 'route6');
-  if(!isset($object) ||
-     !is_array($object) ||
-     !isset($object[$prefix]) ||
-     !is_array($object[$prefix]) ||
-     empty($object[$prefix]['origin']))
-    return;
-
-  return $object[$prefix]['origin'];
+  // Return expanded route-set
+  return array('route-set' => $route6_set_name,
+               'mp-members' => array_keys($route6_set_members));
 }
 
 // ***************************** POLICY FUNCTIONS *****************************
@@ -675,13 +717,13 @@ function get_export_from_to($from_asn, $to_asn)
     // ... expand it into a full list of ASNs
     $as_set = as_set($exported);
     if(isset($as_set) && is_array($as_set))
-      $exported = array_keys($as_set['members']);
+      $exported = $as_set['members'];
   // If exporting route-set ...
   } elseif(preg_match('/^RS\-/i', $exported)) {
     // ... expand it into a full list of prefixes
     $route_set = route_set($exported);
     if(isset($route_set) && is_array($route_set))
-      $exported = array_keys($route_set['members']);
+      $exported = $route_set['members'];
   }
 
   return $exported;
@@ -717,13 +759,13 @@ function get_mpexport_from_to($from_asn, $to_asn)
     // ... expand it into a full list of ASNs
     $as_set = as_set($exported);
     if(isset($as_set) && is_array($as_set))
-      $exported = array_keys($as_set['members']);
+      $exported = $as_set['members'];
   // If exporting route-set ...
   } elseif(preg_match('/^RS\-/i', $exported)) {
     // ... expand it into a full list of prefixes
-    $route_set = route6_set($exported);
-    if(isset($route_set) && is_array($route_set))
-      $exported = array_keys($route_set['mp-members']);
+    $route6_set = route6_set($exported);
+    if(isset($route6_set) && is_array($route6_set))
+      $exported = $route6_set['mp-members'];
   }
 
   return $exported;
@@ -746,43 +788,24 @@ function get_announced_ipv4_prefixes($from_asn, $to_asn)
 
   $announced = array();
 
-  // If array elements are IPv4 prefixes ...
-  if(is_ipv4($exported)) {
+  // Retrieve route objects. Exports can either be
+  // a list of IPv4 prefixes or a list of AS numbers
+  $routes = is_ipv4($exported) ? 
+              query_whois($exported, 'route'):
+              query_whois($exported, 'route', 'origin');
 
-    // ... we got inline list of prefixes
-    foreach($exported as $prefix) {
-      // Resolve prefix origin
-      // (slow with large number of prefixes)
-      $asn = get_ipv4_prefix_origin($prefix);
-      // Store prefix into announced list
-      if(!empty($asn))
-        $announced[$asn][] = $prefix;
-    }
-
-  // Otherwise, if not IPv6 prefixes
-  // (which would surely be a mistake) ...
-  } elseif(!is_ipv6($exported)) {
-
-    // Use RIS server to fetch prefixes ?
-    if(isset($config['use_ris']) &&
-       $config['use_ris'] === TRUE)
-      return query_ris($exported, 'route');
-
-    // Use Whois to fetch prefixes by default
-
-    // Request prefixes for every ASN in the list
-    // (slow but more reliable than RIS)
-    foreach($exported as $asn) {
-      // Skip target ASN if found among exported ASNs.
-      // No point exporting it to itself.
-      if($asn == $to_asn)
-        continue;
-      $prefixes = get_ipv4_prefixes_by_origin($asn);
-      // Store prefixes into announced list
-      if(isset($prefixes))
-        $announced[$asn] = $prefixes;
-    }
-
+  foreach($routes as $prefix => $route) {
+    // Route object must have the origin attribute
+    if(empty($route['origin']))
+      continue;
+    // Make sure origin AS is uppercase
+    $asn = strtoupper($route['origin']);
+    // Skip prefix if originated by target ASN.
+    // No point exporting it to itself.
+    if($asn == $to_asn)
+      continue;
+    // Store prefixes into announced list
+    $announced[$asn][] = $prefix;
   }
 
   return $announced;
@@ -803,43 +826,24 @@ function get_announced_ipv6_prefixes($from_asn, $to_asn)
 
   $announced = array();
 
-  // If array elements are IPv6 prefixes ...
-  if(is_ipv6($exported)) {
+  // Retrieve route objects. Exports can either be
+  // a list of IPv6 prefixes or a list of AS numbers
+  $routes = is_ipv6($exported) ? 
+              query_whois($exported, 'route6'):
+              query_whois($exported, 'route6', 'origin');
 
-    // ... we got inline list of announced prefixes
-    foreach($exported as $prefix) {
-      // Resolve prefix origin
-      // (slow with large number of prefixes)
-      $asn = get_ipv6_prefix_origin($prefix);
-      // Store prefix into announced list
-      if(!empty($asn))
-        $announced[$asn][] = $prefix;
-    }
-
-  // Otherwise, if not IPv4 prefixes
-  // (which would surely be a mistake) ...
-  } elseif(!is_ipv4($exported)) {
-
-    // Use RIS server to fetch prefixes ?
-    if(isset($config['use_ris']) &&
-       $config['use_ris'] === TRUE)
-      return query_ris($exported, 'route6');
-
-    // Use Whois to fetch prefixes by default
-
-    // Request prefixes for every ASN in the list
-    // (slow but more reliable than RIS)
-    foreach($exported as $asn) {
-      // Skip target ASN if found among exported ASNs.
-      // No point exporting it to itself.
-      if($asn == $to_asn)
-        continue;
-      $prefixes = get_ipv6_prefixes_by_origin($asn);
-      // Store prefixes into announced list
-      if(isset($prefixes))
-        $announced[$asn] = $prefixes;
-    }
-
+  foreach($routes as $prefix => $route) {
+    // Route object must have the origin attribute
+    if(empty($route['origin']))
+      continue;
+    // Make sure origin AS is uppercase
+    $asn = strtoupper($route['origin']);
+    // Skip prefix if originated by target ASN.
+    // No point exporting it to itself.
+    if($asn == $to_asn)
+      continue;
+    // Store prefixes into announced list
+    $announced[$asn][] = $prefix;
   }
 
   return $announced;

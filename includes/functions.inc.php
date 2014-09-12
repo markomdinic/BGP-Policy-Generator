@@ -294,9 +294,9 @@ function update_template($autotemplate, &$statusmsg="")
 
           // This mandatory attribute defines a regular expression
           // used to select prefixes automatically collected from
-          // Whois/RIS server by their origin AS. Auto prefix list
-          // tag expands into a series of prefix lists selected by
-          // this regular expression.
+          // whois server by their origin AS. Auto prefix list tag
+          // expands into a series of prefix lists selected by this
+          // regular expression.
           $origin_regex = $p->getAttribute('origin');
           if(empty($origin_regex))
             continue;
@@ -318,7 +318,7 @@ function update_template($autotemplate, &$statusmsg="")
 
           // This optional attribute, if defined, represents regex
           // that directly filters prefixes automatically collected
-          // from Whois/RIS server.
+          // from whois server.
           $prefix_regex = $p->getAttribute('filter');
 
           // Tag's value is optional and, if defined, represents

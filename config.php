@@ -2,15 +2,12 @@
 
 // Our autonomous system number
 $config['local_as'] = "65535";
-// Get prefixes from RIS, rather than Whois ?
-$config['use_ris'] = false;
 
 // Whois parameters
-$config['whois_ris_server'] = "riswhois.ripe.net";
 $config['whois_server'] = "whois.ripe.net";
 $config['whois_port'] = 43;
-$config['whois_timeout'] = 20;
-$config['whois_delay'] = 5;
+$config['whois_sock_timeout'] = 5;
+$config['whois_query_timeout'] = 300;
 
 // Personality to use for commits
 // and notification emails

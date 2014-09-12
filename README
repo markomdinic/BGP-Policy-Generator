@@ -51,19 +51,13 @@ systems to maintain their peering policies, especially import policies
 which can sometimes be difficult to maintain when peering with large
 networks.
 
-Whois/RIS
-=========
+Whois
+=====
 
-Templates are auto-updated using Whois or RIS databases. Unlike Whois, RIS
-keeps live routes collected from route servers, not route objects which are
-subject to RIRs' policies and scrutiny of its' admins. Therefore, RIS doesn't
-provide authoritative information, but a real-world view of global routing.
-On the other hand, RIS servers provide 'bulk mode' (query multiple objects
-at once), which makes prefix collection considerably faster.
-
-BGP Policy Generator provides option to select the source of prefix information.
-By default, prefixes are collected from Whois server, but that can be overriden
-by setting configuration option 'use_ris' to TRUE.
+Templates are auto-updated using a whois database. By default, RIPE whois
+server is used, but it is a configurable parameter. Queries are performed
+in 'bulk mode' (query multiple objects at once), over a persistent connection
+to the whois server, to make prefix collection as fast as possible.
 
 VCS - Version Control System
 ============================
