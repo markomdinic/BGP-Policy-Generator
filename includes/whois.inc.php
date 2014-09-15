@@ -198,10 +198,8 @@ function whois_request($search, $options='')
         // TRUE. Of course, if we notice other errors, we should
         // handle them.
         switch(socket_last_error($sock)) {
-          // EALREADY
-          case 114:
-          // EINPROGRESS
-          case 115:
+          case EALREADY:
+          case EINPROGRESS:
             // On connect timeout, abort
             if(time() > $connect_timeout) {
               socket_close($sock);

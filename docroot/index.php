@@ -18,19 +18,27 @@
 
 */
 
-// Set memory limit high to avoid
-// errors with large configurations
-ini_set('memory_limit', '2048G');
-// Supress error messages
-error_reporting(~E_ALL);
-
 // Bail out without parameters
 if(empty($_GET) || empty($_GET['platform']) || empty($_GET['type']))
   exit(0);
 
-// This will hold our own configuration
-$config = array('base_dir' => dirname(realpath(__FILE__)).'/..');
+// Set memory limit high to avoid
+// errors with large configurations
+ini_set('memory_limit', '2048M');
 
+// Supress error messages
+error_reporting(~E_ALL);
+
+// This will hold our own configuration
+$base_dir = dirname(realpath(__FILE__)).'/..';
+$config = array(
+  'base_dir' => $base_dir,
+  'includes_dir' => $base_dir."/includes",
+  'templates_dir' => $base_dir."/templates"
+);
+
+// Load our own defines
+include $config['includes_dir']."/defines.inc.php";
 // Load our own configuration
 include $config['base_dir']."/config.php";
 // Load common code library

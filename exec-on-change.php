@@ -19,9 +19,20 @@
 
 */
 
-// This will hold our own configuration
-$config = array('base_dir' => dirname(realpath(__FILE__)));
+// Set memory limit high to avoid
+// errors with large data sets
+ini_set('memory_limit', '2048M');
 
+// This will hold our own configuration
+$base_dir = dirname(realpath(__FILE__));
+$config = array(
+  'base_dir' => $base_dir,
+  'includes_dir' => $base_dir."/includes",
+  'templates_dir' => $base_dir."/templates"
+);
+
+// Load our own defines
+include $config['includes_dir']."/defines.inc.php";
 // Load our own configuration
 include $config['base_dir']."/config.php";
 // Load common code library
