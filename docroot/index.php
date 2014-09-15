@@ -18,6 +18,9 @@
 
 */
 
+// Set memory limit high to avoid
+// errors with large configurations
+ini_set('memory_limit', '2048G');
 // Supress error messages
 error_reporting(~E_ALL);
 

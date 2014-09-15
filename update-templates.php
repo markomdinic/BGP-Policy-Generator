@@ -19,6 +19,10 @@
 
 */
 
+// Set memory limit high to avoid
+// errors with large data sets
+ini_set('memory_limit', '2048G');
+
 function usage()
 {
   echo("Usage: ".basename(realpath(__FILE__))." [--help|-h] [autopolicy_name]\n");
@@ -38,6 +42,7 @@ if(!isset($config['debug']) ||
    $config['debug'] === FALSE)
   // ... supress PHP messages
   error_reporting(~E_ALL);
+
 
 // Set the default time zone
 date_default_timezone_set(empty($config['timezone']) ? 'UTC':$config['timezone']);

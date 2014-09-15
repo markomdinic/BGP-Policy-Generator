@@ -22,28 +22,34 @@ include_once $config['includes_dir'].'/tools.inc.php';
 
 // ************************ LOW LEVEL WHOIS FUNCTIONS *************************
 
-function whois_request($query)
+function whois_request($search, $options='')
 {
   global $config;
 
   // Don't waste my time
-  if(empty($query) || empty($config['whois_server']))
+  if(empty($search))
     return;
+
+  // Whois server type ('irr', 'ripe')
+  // (default: 'ripe')
+  $type = (!empty($config['whois_type'])) ?
+              $config['whois_type']:"ripe";
 
   // Whois server
-  // (mandatory)
-  $host = (is_ipv4($config['whois_server']) ||
-           is_ipv6($config['whois_server'])) ?
-              $config['whois_server']:
-              gethostbyname($config['whois_server']);
-
-  if(empty($host))
-    return;
+  // (default: whois.ripe.net)
+  $host = (!empty($config['whois_server'])) ?
+              $config['whois_server']:"whois.ripe.net";
 
   // Whois TCP port
   // (default: 43)
   $port = (!empty($config['whois_port'])) ?
               $config['whois_port']:43;
+
+  // Address families for connection (AF_INET, AF_INET6)
+  // (default: AF_INET6, AF_INET)
+  $address_families = (!empty($config['whois_address_family'])) ?
+                          $config['whois_address_family']:
+                          array(AF_INET6, AF_INET);
 
   // Socket operations (connect/read/write) timeout
   // (default: 5 seconds)
@@ -55,116 +61,271 @@ function whois_request($query)
   $query_timeout = (!empty($config['whois_query_timeout'])) ?
                        $config['whois_query_timeout']:300;
 
-  // Create a new socket
-  $sock = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
-  if($sock === FALSE)
-    return;
+  // List of whois server addresses should persist
+  // between calls in order to act as a DNS cache
+  static $addrs;
 
-  // Set socket to non-blocking mode
-  socket_set_nonblock($sock);
-
-  // Connect to the whois server
-  $connect_timeout = time() + $socket_timeout;
-  while(socket_connect($sock, $host, $port) === FALSE) {
-    switch(socket_last_error($sock)) {
-      // EALREADY
-      case 114:
-      // EINPROGRESS
-      case 115:
-        // On connect timeout, abort
-        if(time() > $connect_timeout) {
-          socket_close($sock);
-          return;
-        }
-        sleep(1);
-        break;
-      // On other errors, abort
-      default:
-        socket_close($sock);
-        return;
-    }
-  }
-
-  // Set socket operations timeout
-  $timeout = array('sec' => $socket_timeout, 'usec' => 0);
-  socket_set_option($sock, SOL_SOCKET, SO_SNDTIMEO, $timeout);
-  socket_set_option($sock, SOL_SOCKET, SO_RCVTIMEO, $timeout);
-
-  // Open persistent mode
-  if(socket_write($sock, "-k\n") === FALSE) {
-    socket_close($sock);
-    return;
-  }
-
-  // Query cannot last beyond this time
-  $query_deadline = time() + $query_timeout;
-
-  // Send query
-  for($sent = 0, $size = strlen($query); $sent < $size; $sent += $written) {
-    $wsock = array($sock);
-    $null = NULL;
-    // Wait for socket to become ready
-    // for writing one second at a time
-    $ready = socket_select($null, $wsock, $null, 1);
-    // Error ?
-    if($ready === FALSE) {
-      socket_close($sock);
-      return;
-    }
-    // Socket ready ?
-    if($ready > 0) {
-      // Write a query chunk
-      $written = socket_write($sock, substr($query, $sent), 1048576);
-      // On error - abort
-      if($written === FALSE) {
-        socket_close($sock);
-        return;
-      }
+  // If 'DNS cache' is empty ...
+  if(empty($addrs)) {
+    // Create a new list of addresses
+    $addrs = array();
+    // Whois server specified as IPv4 address ?
+    if(is_ipv4($host)) {
+      $addrs[AF_INET] = $host;
+    // Whois server specified as IPv6 address ?
+    } elseif(is_ipv6($host)) {
+      $addrs[AF_INET6] = $host;
+    // Whois server specified as hostname ...
     } else {
-      // On timeout, abort
-      if(time() > $query_deadline)
-        return;
+      // Resolve whois server's hostname
+      $records = dns_get_record($host, DNS_AAAA + DNS_A);
+      if(!empty($records)) {
+        // Process retrieved DNS records
+        foreach($records as $record) {
+          // Ignore empty records
+          if(empty($record))
+            continue;
+          // Assign retrieved addresses
+          // to their respective families
+          switch($record['type']) {
+            case 'A':
+              $addrs[AF_INET] = $record['ip'];
+              break;
+            case 'AAAA':
+              $addrs[AF_INET6] = $record['ipv6'];
+              break;
+          }
+        }
+      }
     }
+    // Nothing to do if hostname failed to resolve
+    if(empty($addrs))
+      return;
   }
 
-  // Now we wait for response
+  // Determine if and how to begin and end
+  // persistent connection (bulk mode)
+  switch($type) {
+    // Whois server is 100% RIPE compatibile
+    // (which is whois.ripe.net only, AFAIK)
+    case 'ripe':
+      $begin = "-k";
+      $end = "-k";
+      break;
+    // Whois server is based on IRRd software.
+    // It's compatibile with RIPE for the most
+    // part, but persistant connection mode is
+    // handled slightly differently
+    case 'irrd':
+      $begin = "!!";
+      $end = "q";
+      break;
+  }
+
+  // Prepared queries will be stored here
+  // and then taken from this array and
+  // executed in the same order in which
+  // they were placed here
+  $queries = array();
+
+  // Make sure search is always an array
+  // even if it contains a single element
+  if(!is_array($search))
+    $search = array($search);
+
+  // Bulk mode enabled ?
+  if(!empty($begin) && !empty($end)) {
+    // Prepare bulk query by concatenating
+    // all lookup strings prepended with
+    // whois options. In bulk mode we will
+    // perform a single query asking for
+    // many RPSL objects at once
+    $queries[] = $options." ".implode("\n".$options." ", $search)."\n";
+  // Bulk mode is disabled ...
+  } else {
+    // Without bulk mode we will perform as many queries
+    // as there are RPSL objects we want to retrieve
+    foreach(array_unique($search) as $lookup_string)
+      // Prepare each query by prepending
+      // whois options to the lookup string
+      $queries[] = $options." ".$lookup_string."\n";
+  }
+
+  // Make sure address families are always in an array
+  // even if only a single address family is specified
+  if(!is_array($address_families))
+    $address_families = array($address_families);
+
+  // This will hold the response to our search
+  // either retrieved all at once, in bulk mode
+  // or built by fetching and appending object
+  // by object, without bulk mode
   $response = '';
 
-  // Read response
-  while(time() < $query_deadline) {
-    $rsock = array($sock);
-    $null = NULL;
-    // Wait for socket to become ready
-    // for reading one second at a time
-     $ready = socket_select($rsock, $null, $null, 1);
-    // Error ?
-    if($ready === FALSE) {
-      socket_close($sock);
-      return;
+  // Run all queries
+  foreach($queries as $query) {
+
+    // First, we need to connect
+    $sock = false;
+
+    // Create socket and try to connect
+    foreach($address_families as $af) {
+      // No address for this address family ...
+      if(empty($addrs[$af]))
+        // ... try the next address family
+        continue;
+
+      // Create new socket
+      $sock = socket_create($af, SOCK_STREAM, SOL_TCP);
+      if($sock === FALSE)
+        continue;
+
+      // Set socket to non-blocking mode
+      socket_set_nonblock($sock);
+
+      // Moment in which connection attempts timeout
+      $connect_timeout = time() + $socket_timeout;
+
+      // Keep trying to connect until success or timeout
+      while(socket_connect($sock, $addrs[$af], $port) === FALSE) {
+        // Since we are in non-blocking mode, socket_connect()
+        // will keep returning FALSE until we are connected
+        // even if there is no true error condition. During
+        // that time, error codes we may encounter are EALREADY
+        // and EINPROGRESS indicating that connection is pending,
+        // so we should simply ignore them and keep trying to
+        // get to the point where socket_connect() will return
+        // TRUE. Of course, if we notice other errors, we should
+        // handle them.
+        switch(socket_last_error($sock)) {
+          // EALREADY
+          case 114:
+          // EINPROGRESS
+          case 115:
+            // On connect timeout, abort
+            if(time() > $connect_timeout) {
+              socket_close($sock);
+              $sock = false;
+              continue 3;
+            }
+            // Wait 1 ms
+            usleep(1000);
+            break;
+          // On other errors, abort
+          default:
+            socket_close($sock);
+            $sock = false;
+            continue 3;
+        }
+      }
+
+      // We are connected now,
+      // so we are done here
+      break;
     }
-    // Socket ready ?
-    if($ready > 0) {
-      // Read a response chunk
-      $chunk = socket_read($sock, 1048576);
-      // On error - abort
-      if($chunk === FALSE) {
+
+    // Connection failed for whatever reason ?
+    if($sock === FALSE)
+      // Abort !
+      return;
+
+    // If bulk mode is enabled ...
+    if(!empty($begin) && !empty($end)) {
+      // ... begin persistent connection
+      if(socket_write($sock, $begin."\n") === FALSE) {
         socket_close($sock);
         return;
       }
-      // If we got nothing, we are done
-      if(empty($chunk))
-        break;
-      // Append chunk to the receive buffer
-      $response .= $chunk;
-    // If socket was idle ...
-    } else
-      // ... close persistent mode
-      socket_write($sock, "-k\n");
+    }
+
+    // Query cannot last beyond this time
+    $query_deadline = time() + $query_timeout;
+
+    // Total size of the query
+    $size = strlen($query);
+    // Amount of data sent
+    $sent = 0;
+
+    // Socket to monitor for read readiness
+    $in_sock = array($sock);
+    // Socket to monitor for write readiness
+    $out_sock = array($sock);
+
+    // Until query timeout ...
+    while(time() < $query_deadline) {
+      $read_ready = $in_sock;
+      $write_ready = $out_sock;
+      $null = NULL;
+      // Wait for socket to become ready
+      $ready = socket_select($read_ready, $write_ready, $null, 1);
+      // Error ?
+      if($ready === FALSE) {
+        socket_close($sock);
+        return;
+      }
+      // If socket is ready ...
+      if($ready > 0) {
+        // .. for writing ?
+        if(!empty($write_ready)) {
+          if(in_array($sock, $write_ready)) {
+            // As long as query hasn't been fully sent ...
+            if($sent < $size) {
+              // ... write a chunk
+              $written = socket_write($sock, substr($query, $sent), 1000);
+              // On error - abort
+              if($written === FALSE) {
+                socket_close($sock);
+                return;
+              }
+              // Adjust the total amount sent
+              $sent += $written;
+              // Now, if entire query has been sent ...
+              if($sent >= $size) {
+                // ... stop monitoring socket
+                // for write readiness
+                $out_sock = NULL;
+              }
+            }
+          }
+        }
+        // ... for reading ?
+        if(!empty($read_ready)) {
+          if(in_array($sock, $read_ready)) {
+            // Read a chunk of response
+            $chunk = socket_read($sock, 10000);
+            // On error - abort
+            if($chunk === FALSE) {
+              socket_close($sock);
+              return;
+            }
+            // If we got nothing, we are done
+            if(empty($chunk))
+              break;
+            // Append chunk to the response
+            $response .= $chunk;
+          }
+        }
+      // Socket became idle ...
+      } else {
+        // If bulk mode is enabled ...
+        if(empty($out_sock) && !empty($begin) && !empty($end))
+          // ... end persistent connection
+          socket_write($sock, $end."\n");
+      }
+    }
+
+    // This newline is extremely important
+    // in order to separate objects when
+    // fetching them one by one without
+    // bulk mode. Has no impact on bulk
+    // queries, so it doesn't hurt.
+    $response .= "\n";
   }
 
-  // Close connection
+  // Close the connection
   socket_close($sock);
 
+  // Return cumulative response
   return $response;
 }
 
@@ -179,36 +340,24 @@ function query_whois($search, $type=NULL, $attr=NULL)
     return;
 
   //
-  // Leave out contact info
-  // to avoid daily limit ban:
+  // Leave out contact information
+  // to avoid RIPE's daily limit ban:
   //
   //   http://www.ripe.net/data-tools/db/faq/faq-db/why-did-you-receive-the-error-201-access-denied
   //
-  $query = '-r';
+  $options = '-r';
+  // Preferred whois source
+  if(!empty($config['whois_source']))
+    $options .= ' -s'.$config['whois_source'];
   // Preferred object type
   if(!empty($type))
-    $query .= ' -T'.$type;
+    $options .= ' -T'.$type;
   // Inverse lookup by this attribute
   if(!empty($attr))
-    $query .= ' -i'.$attr;
-  // Finalize query parameters
-  $query .= ' ';
-
-  // Make sure search is always an array
-  // even if it contains a single element
-  if(!is_array($search))
-    $search = array($search);
-
-  $search_string = '';
-
-  // Serialize search array without using implode().
-  // It can exceede allowed memory for large queries.
-  foreach(array_unique($search) as $obj)
-    $search_string .= $query.$obj."\n";
+    $options .= ' -i'.$attr;
 
   // Query whois server
-  $response = whois_request($search_string);
-
+  $response = whois_request($search, $options);
   // Got nothing - aborting
   if(empty($response))
     return;
@@ -216,12 +365,9 @@ function query_whois($search, $type=NULL, $attr=NULL)
   // Parsed objects go here
   $objects = array();
 
-  // What ? explode() you say ? Well, duh ...
-  // Try it on a really large response !
-  for($o = 0; ($n = strpos($response, "\n", $o)) !== FALSE; $o = $n + 1) {
-
-    // Extract current line
-    $line = substr($response, $o, $n - $o);
+  // Split whois response into individual lines
+  // and then parse them into RPSL objects
+  foreach(explode("\n", $response) as $line) {
 
     // Object ends on an empty line
     if(empty($line)) {

@@ -19,6 +19,9 @@
 
 */
 
+// Set memory limit high to avoid
+// errors with large data sets
+ini_set('memory_limit', '2048G');
 
 function usage()
 {

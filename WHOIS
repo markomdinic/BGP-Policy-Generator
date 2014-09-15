@@ -1,0 +1,66 @@
+
+Whois is configured using following parameters:
+
+  $config['whois_server']            - Hostname or IPv4/IPv6 address of the server.
+
+                                       Default: whois.ripe.net.
+
+  $config['whois_port']              - TCP port of the whois service
+
+                                       Default: 43
+
+  $config['whois_address_family']    - Address family or families used for connection.
+                                       If whois server is specified as an IP address,
+                                       the address must match address family (obviously).
+                                       If hostname is given, it may resolve to both
+                                       IPv4 and IPv6 address(es). This parameter will
+                                       determine which one will be tried first or used
+                                       exclusively.
+                                       Can be:
+
+                                         - AF_INET for IPv4 connection
+                                         - AF_INET6 for IPv6 connection
+                                         - array(AF_INET, AF_INET6) to allow both
+                                           IPv4 and IPv6 connection, preferring
+                                           IPv4 over IPv6.
+                                         - array(AF_INET6, AF_INET) to allow both
+                                           IPv4 and IPv6 connection, preferring
+                                           IPv6 over IPv4.
+
+                                       Default: array(AF_INET6, AF_INET)
+
+  $config['whois_type']              - RIPE-compatibile whois flavor. This option is
+                                       used to determine the way bulk mode is handled.
+                                       Can be:
+
+                                         - 'ripe' for native RIPE server
+                                         - 'irrd' for IRRd-based server
+                                         - NULL for generic whois server, which disables
+                                           bulk mode. Compatibility versus performance.
+                                           Still needs to support RIPE-compatibile
+                                           options, tho.
+
+                                       Default: 'ripe'
+
+  $config['whois_source']            - RPSL database source. When using RIPE's native
+                                       server, there is no source other than 'RIPE',
+                                       but IRRd based servers hosting or mirroring more
+                                       than one database could have multiple objects
+                                       with same primary/lookup keys, but different
+                                       source. Therefore it is important to explicitly
+                                       specify which source database to use.
+
+                                       Default: 'ripe'
+
+  $config['whois_sock_timeout']      - Timeout (in seconds) for socket operations (like
+                                       connect, for example).
+
+                                       Default: 5
+
+  $config['whois_query_timeout']     - Maximum time in seconds a single query can last.
+                                       With bulk queries, it's a single query for multiple
+                                       objects and therefore a single timeout interval.
+                                       When bulk mode is disabled, one query is issued
+                                       per object, each having it's own timeout interval.
+
+                                       Default: 300

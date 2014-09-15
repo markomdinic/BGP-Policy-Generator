@@ -6,6 +6,8 @@ $config['local_as'] = "65535";
 // Whois parameters
 $config['whois_server'] = "whois.ripe.net";
 $config['whois_port'] = 43;
+$config['whois_type'] = "ripe";
+$config['whois_source'] = "ripe";
 $config['whois_sock_timeout'] = 5;
 $config['whois_query_timeout'] = 300;
 

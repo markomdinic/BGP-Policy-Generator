@@ -51,13 +51,32 @@ systems to maintain their peering policies, especially import policies
 which can sometimes be difficult to maintain when peering with large
 networks.
 
-Whois
-=====
+Whois/IRR
+=========
 
-Templates are auto-updated using a whois database. By default, RIPE whois
-server is used, but it is a configurable parameter. Queries are performed
-in 'bulk mode' (query multiple objects at once), over a persistent connection
-to the whois server, to make prefix collection as fast as possible.
+Templates are auto-updated by fetching data from a whois database. For each
+policy, peer's aut-num object is examined to determine which ASNs are exported
+to us. Next, route objects for each of exported ASNs are collected. This data
+is used to generate policy and prefix list templates, which are subsequently
+used to generate configurations. Device config generation is independent
+process and doesn't care where it's templates come from. They could just
+as well be created by hand.
+
+Whois queries can be performed as single queries, which is the default mode
+(connect->query->response->disconnect), or in so called 'bulk mode', over
+a persistent connection (connect->multiple queries->bulk response->disconnect).
+Needless to say, bulk mode is a lot faster, but sort of a server-specific
+feature and not supported by all whois servers. Even those that support it
+handle it differently.
+
+Whois is a simple protocol, but commands/options differ greatly between 
+various whois servers. BGP Policy Generator requires RIPE-compatibile whois
+server and explicitly supports two distinct flavors - native RIPE whois and
+servers based on IRRd software. IRRd-based servers are widely used and usually
+mirror more than just RIPE database. IRRd supports RIPE-specific options that
+we require, but handles bulk mode slightly different from native RIPE server.
+
+By default, RIPE whois server is used, but it is a configurable parameter.
 
 VCS - Version Control System
 ============================
