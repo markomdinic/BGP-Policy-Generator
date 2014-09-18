@@ -21,7 +21,7 @@
 
 function usage()
 {
-  echo("Usage: ".basename(realpath(__FILE__))." [--help|-h] [autopolicy_name]\n");
+  echo("Usage: ".basename(realpath(__FILE__))." [--help|-h] [autopolicy1_name[,autopolicy2_name,...]]\n");
   exit(255);
 }
 

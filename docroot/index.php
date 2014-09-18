@@ -61,8 +61,12 @@ else
 if($platform == 'template' && $type == 'update')
   // Update autopolicies
   update_templates($id);
-else
+else {
   // Generate device configuration
-  generate_configs($platform, $type, $id, $time);
+  $formatted_config = generate_configs($platform, $type, $id, $time);
+  // Display generated configuration
+  if(!empty($formatted_config))
+    print_generated_config($formatted_config);
+}
 
 ?>

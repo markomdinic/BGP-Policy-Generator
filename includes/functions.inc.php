@@ -778,19 +778,14 @@ function include_config(&$include, $type, $id)
   $include[$type][] = $id;
 }
 
-function print_generated_config(&$device_conf, $config_type)
+function format_generated_config(&$device_conf, $config_type)
 {
   // Nothing to do ?
   if(empty($device_conf) || empty($config_type))
     return;
 
   // Serialize configuration
-  $config = "";
-  // We could use the implode() here, but that might
-  // hit the PHP allowed memory limit, so we rather
-  // concatenate config lines by hand
-  foreach($device_conf as $line)
-    $config .= $line."\n";
+  $config = implode("\n", $device_conf);
   // Get content type if generator defines it
   $func = $config_type.'_content_type';
   if(is_callable($func))
@@ -814,11 +809,26 @@ function print_generated_config(&$device_conf, $config_type)
       $config = $doc->saveXML();
       break;
   }
+
+  return array($config, $content_type);
+}
+
+function print_generated_config($formatted_config)
+{
+  // Nothing to do ?
+  if(empty($formatted_config))
+    return;
+
+  list($config, $content_type) = $formatted_config;
+  if(empty($config) || empty($content_type))
+    return;
+
   // Generate HTTP headers if not called from CLI
   if(!(php_sapi_name() == 'cli')) {
     header('Content-Type: '.$content_type);
     header('Content-Length: '.strlen($config));
   }
+
   // Dump generated configuration
   echo($config);
 }
@@ -899,8 +909,8 @@ function generate_config_by_id($platform, $type, $ids, &$device_conf=array())
 
   // If external config storage wasn't given ...
   if(func_num_args() < 4)
-    // ... dump generated configuration
-    print_generated_config($device_conf, $type);
+    // ... format generated configuration
+    return format_generated_config($device_conf, $type);
 
   // Success
   return true;
@@ -911,6 +921,8 @@ function generate_included_config($platform, &$device_conf, &$include)
   // Nothing to do without input data
   if(empty($platform) || !isset($device_conf) || !isset($include))
     return false;
+
+  $config = '';
 
   foreach($include as $type => $ids) {
     if(!is_array($ids))
@@ -986,11 +998,9 @@ function generate_full_config($platform, $type)
   if(is_callable($end))
     $end($device_conf);
 
-  // Dump generated configuration
-  print_generated_config($device_conf, $type);
-
-  // Success
-  return true;
+  // Return generated config
+  // formatted for output
+  return format_generated_config($device_conf, $type);
 }
 
 function generate_configs($platform, $type, $list=NULL, $time=NULL)
@@ -1015,16 +1025,16 @@ function generate_configs($platform, $type, $list=NULL, $time=NULL)
   }
 
   // Generate configuration in requested format
-  $res = empty($ids) ?
-            generate_full_config($platform, $type):
-            generate_config_by_id($platform, $type, $ids);
+  $config = empty($ids) ?
+              generate_full_config($platform, $type):
+              generate_config_by_id($platform, $type, $ids);
 
   // If time was defined...
   if(!empty($time))
     // .. reset repository back to master
     vcs_checkout();
 
-  return $res;
+  return $config;
 }
 
 // **************************** GENERIC FUNCTIONS *****************************

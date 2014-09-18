@@ -21,7 +21,12 @@
 
 function usage()
 {
-  echo("Usage: ".basename(realpath(__FILE__))." [--help|-h] [--before|-b <date>] [--after|-a <date>] <platform> <config_type> [template_id1,template_id2,...]\n");
+  echo("Usage: ".basename(realpath(__FILE__))." [OPTIONS] <platform> <config_type> [template_id1[,template_id2,...]]\n\n");
+  echo(" --help|-h                      This help message\n");
+  echo(" --before|-b <date>             Generate first configuration before this date\n");
+  echo(" --after|-a <date>              Generate first configuration after this date\n");
+  echo(" --mail|-m [target_email]       Send generated configuration via email\n");
+  echo(" --file|-a <output_filename>    Write generated configuration to file\n\n");
   exit(255);
 }
 
@@ -93,6 +98,30 @@ while(count($argv) > 0) {
       // Format time parameter
       $time = '>'.strtotime($arg);
       break;
+    case '-m':
+    case '--mail':
+      // If no email is given as argument ...
+      if(empty($argv[0]) || !preg_match('/@/', $argv[0]))
+        // ... use notify email from configuration
+        $email = $config['notify_email'];
+      // Otherwise ...
+      else
+        // ... use argument as email
+        $email = array_shift($argv);
+      // Supress output to stdout
+      $suppress = true;
+      break;
+    case '-f':
+    case '--file':
+      // Get destination filename
+      $filename = array_shift($argv);
+      // Filename is missing ?
+      if(empty($filename))
+        usage();
+      // Supress output to stdout
+      else
+        $suppress = true;
+      break;
     default:
       $args[] = $arg;
       break;
@@ -108,6 +137,46 @@ $type = empty($args[1]) ? NULL:$args[1];
 $id = empty($args[2]) ? NULL:$args[2];
 
 // Generate device configuration
-generate_configs($platform, $type, $id, $time);
+$formatted_config = generate_configs($platform, $type, $id, $time);
+if(empty($formatted_config))
+  exit(255);
+
+list($config, $content_type) = $formatted_config;
+if(empty($config) || empty($content_type))
+  exit(255);
+
+// If file name is defined ...
+if(!empty($filename)) {
+  // ... save generated config to file
+  if(file_put_contents($filename, $config) === FALSE) {
+    echo("Failed to write generated configuration to file ".$filename."\n");
+    exit(255);
+  }
+  echo("Successfully written generated configuration to file ".$filename."\n");
+}
+
+// If target email address is defined ...
+if(!empty($email)) {
+  $from = NULL;
+  if(!empty($config['my_email'])) {
+    if(!empty($config['my_name']))
+      $from = "From: ".$config['my_name']." <".$config['my_email'].">";
+    else
+      $from = "From: ".$config['my_email'];
+  }
+  $subject = "[BGP Policy Generator] ".$platform." ".$type." ".$id;
+  // ... send generated configuration via email
+  if(mail($email, $subject, $config, $from) === FALSE) {
+    echo("Failed to send generated configuration to ".$email."\n");
+    exit(255);
+  }
+  echo("Successfully sent generated configuration to ".$email."\n");
+}
+
+// Dump generated config to stdout by default
+if(empty($suppress))
+  echo($config);
+
+exit(0);
 
 ?>

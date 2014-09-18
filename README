@@ -219,6 +219,9 @@ configurations from shell, invoke
 
   <installdir>/generate-configs.php --before|--after <datetime> <platform> <type> <name1>,<name2>,<name3>,...
 
+By default, generate-configs.php dumps generated configuration to stdout, but you
+can send it via email and/or save it to file instead.
+
 To update autopolicies from shell, invoke
 
   <installdir>/update-templates.php
