@@ -63,10 +63,10 @@ if($platform == 'template' && $type == 'update')
   update_templates($id);
 else {
   // Generate device configuration
-  $formatted_config = generate_configs($platform, $type, $id, $time);
+  $formatted_conf = generate_configs($platform, $type, $id, $time);
   // Display generated configuration
-  if(!empty($formatted_config))
-    print_generated_config($formatted_config);
+  if(!empty($formatted_conf))
+    print_generated_config($formatted_conf);
 }
 
 ?>

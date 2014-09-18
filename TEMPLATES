@@ -369,7 +369,13 @@ but an optional string to prepend to the generated prefix list name.
                <prefix-list> tags in place of <auto-prefix-list>. This means that not
                only does this regex picks which prefix lists will be generated, but
                also defines the exact spot inside generated policy template these
-               prefix lists will be referenced from.
+               prefix lists will be referenced from. Note that this is NOT in any
+               way related to as-path regex. While as-path regexp specifies the desired
+               relationship between autonomous systems (who is advertising given prefix
+               to whom), origin regexp simply selects prefixes originated by matching
+               ASN(s) from a flat list of announced ASNs produced by recursively
+               expanding as-set specified in the export attribute of peer's aut-num
+               object.
  'aggregate' - Indicates whether collected prefixes should be aggregated into largest
                possible blocks prior to generating prefix lists. Works only on IPv4
                at the moment. Can be 'yes' or 'no'.

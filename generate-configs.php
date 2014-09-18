@@ -137,18 +137,18 @@ $type = empty($args[1]) ? NULL:$args[1];
 $id = empty($args[2]) ? NULL:$args[2];
 
 // Generate device configuration
-$formatted_config = generate_configs($platform, $type, $id, $time);
-if(empty($formatted_config))
+$formatted_conf = generate_configs($platform, $type, $id, $time);
+if(empty($formatted_conf))
   exit(255);
 
-list($config, $content_type) = $formatted_config;
-if(empty($config) || empty($content_type))
+list($conf_text, $content_type) = $formatted_conf;
+if(empty($conf_text) || empty($content_type))
   exit(255);
 
 // If file name is defined ...
 if(!empty($filename)) {
   // ... save generated config to file
-  if(file_put_contents($filename, $config) === FALSE) {
+  if(file_put_contents($filename, $conf_text) === FALSE) {
     echo("Failed to write generated configuration to file ".$filename."\n");
     exit(255);
   }
@@ -166,7 +166,7 @@ if(!empty($email)) {
   }
   $subject = "[BGP Policy Generator] ".$platform." ".$type." ".$id;
   // ... send generated configuration via email
-  if(mail($email, $subject, $config, $from) === FALSE) {
+  if(mail($email, $subject, $conf_text, $from) === FALSE) {
     echo("Failed to send generated configuration to ".$email."\n");
     exit(255);
   }
@@ -175,7 +175,7 @@ if(!empty($email)) {
 
 // Dump generated config to stdout by default
 if(empty($suppress))
-  echo($config);
+  echo($conf_text);
 
 exit(0);
 

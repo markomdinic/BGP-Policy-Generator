@@ -79,7 +79,6 @@ if(!empty($args) && count($args) > 1)
 
 $id = empty($args[0]) ? NULL:$args[0];
 
-
 // Update autopolicies
 update_templates($id);
 

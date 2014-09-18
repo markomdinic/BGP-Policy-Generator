@@ -785,7 +785,7 @@ function format_generated_config(&$device_conf, $config_type)
     return;
 
   // Serialize configuration
-  $config = implode("\n", $device_conf);
+  $conf_text = implode("\n", $device_conf)."\n";
   // Get content type if generator defines it
   $func = $config_type.'_content_type';
   if(is_callable($func))
@@ -802,35 +802,35 @@ function format_generated_config(&$device_conf, $config_type)
       $doc->preserveWhiteSpace = false;
       $doc->validateOnParse = true;
       // Load XML as is
-      $doc->loadXML($config);
+      $doc->loadXML($conf_text);
       // Make it pretty
       $doc->formatOutput = true;
       // Put it back nicely formatted
-      $config = $doc->saveXML();
+      $conf_text = $doc->saveXML();
       break;
   }
 
-  return array($config, $content_type);
+  return array($conf_text, $content_type);
 }
 
-function print_generated_config($formatted_config)
+function print_generated_config($formatted_conf)
 {
   // Nothing to do ?
-  if(empty($formatted_config))
+  if(empty($formatted_conf))
     return;
 
-  list($config, $content_type) = $formatted_config;
-  if(empty($config) || empty($content_type))
+  list($conf_text, $content_type) = $formatted_conf;
+  if(empty($conf_text) || empty($content_type))
     return;
 
   // Generate HTTP headers if not called from CLI
   if(!(php_sapi_name() == 'cli')) {
     header('Content-Type: '.$content_type);
-    header('Content-Length: '.strlen($config));
+    header('Content-Length: '.strlen($conf_text));
   }
 
   // Dump generated configuration
-  echo($config);
+  echo($conf_text);
 }
 
 function generate_config_by_id($platform, $type, $ids, &$device_conf=array())
@@ -921,8 +921,6 @@ function generate_included_config($platform, &$device_conf, &$include)
   // Nothing to do without input data
   if(empty($platform) || !isset($device_conf) || !isset($include))
     return false;
-
-  $config = '';
 
   foreach($include as $type => $ids) {
     if(!is_array($ids))
@@ -1025,16 +1023,16 @@ function generate_configs($platform, $type, $list=NULL, $time=NULL)
   }
 
   // Generate configuration in requested format
-  $config = empty($ids) ?
-              generate_full_config($platform, $type):
-              generate_config_by_id($platform, $type, $ids);
+  $formatted_conf = empty($ids) ?
+                      generate_full_config($platform, $type):
+                      generate_config_by_id($platform, $type, $ids);
 
   // If time was defined...
   if(!empty($time))
     // .. reset repository back to master
     vcs_checkout();
 
-  return $config;
+  return $formatted_conf;
 }
 
 // **************************** GENERIC FUNCTIONS *****************************
