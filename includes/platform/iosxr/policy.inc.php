@@ -20,30 +20,35 @@
 
 function policy_generate($template, &$iosxr_conf, &$include)
 {
+  // Policy configuration
+  $policy_conf = array();
+  // Policy 'subroutines'
+  $sub_conf = array();
+
   foreach($template->getElementsByTagName('policy') as $policy) {
     // Policy name is mandatory
     $policy_name = $policy->getAttribute('id');
     if(!is_name($policy_name))
       continue;
 
-    // Begin policy
-    $iosxr_conf[] = "route-policy ".$policy_name;
-
-    // Look for 'config' tags that contain
-    // free-form, device-specific config
-    $ff = get_freeform_config($policy, 'iosxr', 'prepend');
-    if(!empty($ff))
-      $iosxr_conf[] = $ff;
-
+    // RPL 'terms' are if/elseif/else statements.
+    // As expected, first 'term' begins with 'if'
     $if = "if";
 
+    // Begin policy term
+    $term_conf = array();
+
     foreach($policy->getElementsByTagName('term') as $term) {
+      // Term name is mandatory
+      $term_name = $term->getAttribute('id');
+      if(!is_name($term_name))
+        continue;
 
       // Look for 'config' tags that contain
       // free-form, device-specific config
       $ff = get_freeform_config($term, 'iosxr', 'prepend');
       if(!empty($ff))
-        $iosxr_conf[] = $ff;
+        $term_conf[] = $ff;
 
       // Match conditions
       $match_conf = array();
@@ -56,6 +61,16 @@ function policy_generate($template, &$iosxr_conf, &$include)
         if(!empty($ff))
           $match_conf[] = $ff;
 
+        // Neighbor (advertising source of the route)
+        $neighbors = array();
+        foreach($match->getElementsByTagName('neighbor') as $n) {
+          // Neighbor address is mandatory
+          $neighbor = $n->nodeValue;
+          if(!empty($neighbor))
+            $neighbors[] = $neighbor;
+        }
+        if(!empty($neighbors))
+          $match_conf[] = "source in ( ".implode(" , ", $neighbors)." )";
         // Protocol
         $protocols = array();
         foreach($match->getElementsByTagName('protocol') as $p) {
@@ -115,7 +130,7 @@ function policy_generate($template, &$iosxr_conf, &$include)
           $prefix_set_name = $p->nodeValue;
           if(empty($prefix_set_name))
             continue;
-          $prefix_sets[] = "destination in ".$prefix_set_name;
+          $prefix_sets[] = $prefix_set_name;
           // Include prefix set definition ?
           switch($p->getAttribute('include')) {
             case 'true':
@@ -127,38 +142,58 @@ function policy_generate($template, &$iosxr_conf, &$include)
               break;
           }
         }
-        if(!empty($prefix_sets))
-          $match_conf[] = implode(" or\n".str_pad('', strlen($if)+5), $prefix_sets);
+        if(!empty($prefix_sets) && count($match_conf) < 16) {
+          // If/elseif statement cannot contain more than 16 conditions
+          if(count($prefix_sets) + count($match_conf) > 15) {
+            $sub_name = $policy_name."::".$term_name."::PFXSET";
+            $sub_conf[] = "route-policy ".$sub_name;
+            $sub_conf[] = "  if destination in ".implode(" then\n    pass\n  elseif destination in ", $prefix_sets)." then\n    pass";
+            $sub_conf[] = "  else\n    drop\n  endif";
+            $sub_conf[] = "end-policy";
+            $match_conf[] = "apply ".$sub_name;
+          } else
+            $match_conf[] = "destination in ".implode(" or\n".str_pad('', strlen($if)+5)."destination in ", $prefix_sets);
+        }
         // AS-path
         $aspaths = array();
         foreach($match->getElementsByTagName('as-path') as $a) {
           // AS-path name is mandatory
           $aspath = $a->nodeValue;
           if(!empty($aspath))
-            $aspaths[] = "as-path in ".$aspath;
+            $aspaths[] = $aspath;
         }
-        if(!empty($aspaths))
-          $match_conf[] = implode(" or\n".str_pad('', strlen($if)+5), $aspaths);
+        if(!empty($aspaths) && count($match_conf) < 16) {
+          // If/elseif statement cannot contain more than 16 conditions
+          if(count($aspaths) + count($match_conf) > 15) {
+            $sub_name = $policy_name."::".$term_name."::ASPATH";
+            $sub_conf[] = "route-policy ".$sub_name;
+            $sub_conf[] = "  if as-path in ".implode(" then\n    pass\n  elseif as-path in ", $aspaths)." then\n    pass";
+            $sub_conf[] = "  else\n    drop\n  endif";
+            $sub_conf[] = "end-policy";
+            $match_conf[] = "apply ".$sub_name;
+          } else
+            $match_conf[] = "as-path in ".implode(" or\n".str_pad('', strlen($if)+5)."as-path in ", $aspaths);
+        }
         // Community
         $communities = array();
         foreach($match->getElementsByTagName('community') as $c) {
           // Community name is mandatory
           $community = $c->nodeValue;
           if(!empty($community))
-            $communities[] = "community matches-any ".$community;
+            $communities[] = $community;
         }
-        if(!empty($communities))
-          $match_conf[] = implode(" or\n".str_pad('', strlen($if)+5), $communities);
-        // Neighbor (advertising source of the route)
-        $neighbors = array();
-        foreach($match->getElementsByTagName('neighbor') as $n) {
-          // Neighbor address is mandatory
-          $neighbor = $n->nodeValue;
-          if(!empty($neighbor))
-            $neighbors[] = $neighbor;
+        if(!empty($communities) && count($match_conf) < 16) {
+          // If/elseif statement cannot contain more than 16 conditions
+          if(count($communities) + count($match_conf) > 15) {
+            $sub_name = $policy_name."::".$term_name."::COMM";
+            $sub_conf[] = "route-policy ".$sub_name;
+            $sub_conf[] = "  if community matches-any ".implode(" then\n    pass\n  elseif community matches-any ", $aspaths)." then\n    pass";
+            $sub_conf[] = "  else\n    drop\n  endif";
+            $sub_conf[] = "end-policy";
+            $match_conf[] = "apply ".$sub_name;
+          } else
+            $match_conf[] = "community matches-any ".implode(" or\n".str_pad('', strlen($if)+5)."community matches-any ", $communities);
         }
-        if(!empty($neighbors))
-          $match_conf[] = "source in ( ".implode(" , ", $neighbors)." )";
 
         // Look for 'config' tags that contain
         // free-form, device-specific config
@@ -170,10 +205,8 @@ function policy_generate($template, &$iosxr_conf, &$include)
         break;
       }
 
-      // Put together the RPL match line
-      $iosxr_conf[] = empty($match_conf) ?
-                        "  else":
-                        "  ".$if." ( ".implode(" ) and\n".str_pad('', strlen($if)+2)." ( ", $match_conf)." ) then";
+      // Set statements
+      $set_conf = array();
 
       foreach($term->getElementsByTagName('set') as $set) {
 
@@ -181,14 +214,14 @@ function policy_generate($template, &$iosxr_conf, &$include)
         // free-form, device-specific config
         $ff = get_freeform_config($set, 'iosxr', 'prepend');
         if(!empty($ff))
-          $iosxr_conf[] = $ff;
+          $set_conf[] = $ff;
 
         // AS-path prepend
         foreach($set->getElementsByTagName('prepend') as $p) {
           // AS-path prepend string is mandatory
           $prepend = $p->nodeValue;
           if(!empty($prepend))
-            $iosxr_conf[] = "    prepend as-path ".preg_replace('/\s+/', " . ", $prepend);
+            $set_conf[] = "prepend as-path ".preg_replace('/\s+/', " . ", $prepend);
           break;
         }
         // Multi-exit discriminator (MED)
@@ -200,15 +233,15 @@ function policy_generate($template, &$iosxr_conf, &$include)
           switch($p->getAttribute('action')) {
             case '+':
             case 'add':
-              $iosxr_conf[] = "    set med + ".$metric;
+              $set_conf[] = "set med + ".$metric;
               break;
             case '-':
             case 'sub':
             case 'subtract':
-              $iosxr_conf[] = "    set med - ".$metric;
+              $set_conf[] = "set med - ".$metric;
               break;
             default:
-              $iosxr_conf[] = "    set med ".$metric;
+              $set_conf[] = "set med ".$metric;
               break;
           }
           // There can be only one MED
@@ -219,7 +252,7 @@ function policy_generate($template, &$iosxr_conf, &$include)
           // Local preference amount is mandatory
           $preference = $l->nodeValue;
           if(is_numeric($preference))
-            $iosxr_conf[] = "    set local-preference ".$preference;
+            $set_conf[] = "set local-preference ".$preference;
           // There can be only one local preference
           break;
         }
@@ -229,15 +262,15 @@ function policy_generate($template, &$iosxr_conf, &$include)
           switch($o->nodeValue) {
             case 'i':
             case 'igp':
-              $iosxr_conf[] = "    set origin igp";
+              $set_conf[] = "set origin igp";
               break;
             case 'e':
             case 'egp':
-              $iosxr_conf[] = "    set origin egp";
+              $set_conf[] = "set origin egp";
               break;
             case '?':
             case 'incomplete':
-              $iosxr_conf[] = "    set origin incomplete";
+              $set_conf[] = "set origin incomplete";
               break;
           }
           // There can be only one origin
@@ -256,15 +289,15 @@ function policy_generate($template, &$iosxr_conf, &$include)
           switch($action) {
             case '=':
             case 'set':
-              $iosxr_conf[] = "    set community ".$name;
+              $set_conf[] = "set community ".$name;
               break;
             case '+':
             case 'add':
-              $iosxr_conf[] = "    set community ".$name." additive";
+              $set_conf[] = "set community ".$name." additive";
               break;
             case '-':
             case 'delete':
-              $iosxr_conf[] = "    delete community ".$name;
+              $set_conf[] = "delete community ".$name;
               break;
           }
         }
@@ -276,20 +309,20 @@ function policy_generate($template, &$iosxr_conf, &$include)
             break;
           switch($next_hop) {
             case 'self':
-              $iosxr_conf[] = "    set next-hop self";
+              $set_conf[] = "set next-hop self";
               break;
             case 'reject':
             case 'discard':
-              $iosxr_conf[] = "    set next-hop discard";
+              $set_conf[] = "set next-hop discard";
               break;
             case 'peer':
             case 'peeraddress':
             case 'peer-address':
             case 'peer_address':
-              $iosxr_conf[] = "    set next-hop peer-address";
+              $set_conf[] = "set next-hop peer-address";
               break;
             default:
-              $iosxr_conf[] = "    set next-hop ".$next_hop;
+              $set_conf[] = "set next-hop ".$next_hop;
               break;
           }
           // There can be only one next-hop
@@ -300,7 +333,7 @@ function policy_generate($template, &$iosxr_conf, &$include)
         // free-form, device-specific config
         $ff = get_freeform_config($set, 'iosxr', 'append');
         if(!empty($ff))
-          $iosxr_conf[] = $ff;
+          $set_conf[] = $ff;
 
         // There can be only one <set> within <term>
         break;
@@ -309,32 +342,67 @@ function policy_generate($template, &$iosxr_conf, &$include)
       // Add final action if defined
       $action = $term->getAttribute('action');
       if($action == "permit" || $action == "accept")
-        $iosxr_conf[] = "    pass";
+        $set_conf[] = "pass";
       elseif($action == "deny" || $action == "reject")
-        $iosxr_conf[] = "    drop";
+        $set_conf[] = "drop";
 
       // Look for 'config' tags that contain
       // free-form, device-specific config
       $ff = get_freeform_config($term, 'iosxr', 'append');
       if(!empty($ff))
-        $iosxr_conf[] = $ff;
+        $set_conf[] = $ff;
 
-      // End term and prepare for the next
+      // Finally, put together RPL 'term'
+
+      // Serialize match conditions
+      $term_conf[] = empty($match_conf) ?
+                        "  else":
+                        "  ".$if." ( ".implode(" ) and\n".str_pad('', strlen($if)+2)." ( ", $match_conf)." ) then";
+      // Serialize set conditions
+      $term_conf[] = "    ".implode("\n    ", $set_conf);
+
+      // Term is now complete
+
+      // Only the first term starts with 'if'
+      // and the last with 'else'. All others
+      // (the middle ones) start with 'elseif'
       $if = "elseif";
     }
 
     // End policy terms
-    $iosxr_conf[] = "  endif";
+    $term_conf[] = "endif";
+
+    // Serialize generated policy configuration
+
+    // Begin policy
+    $policy_conf[] = "route-policy ".$policy_name;
+
+    // Look for 'config' tags that contain
+    // free-form, device-specific config
+    $ff = get_freeform_config($policy, 'iosxr', 'prepend');
+    if(!empty($ff))
+      $policy_conf[] = $ff;
+
+    // Add serialized policy terms
+    $policy_conf[] = implode("\n", $term_conf);
 
     // Look for 'config' tags that contain
     // free-form, device-specific config
     $ff = get_freeform_config($policy, 'iosxr', 'append');
     if(!empty($ff))
-      $iosxr_conf[] = $ff;
+      $policy_conf[] = $ff;
 
     // End policy
-    $iosxr_conf[] = "end-policy";
+    $policy_conf[] = "end-policy";
   }
+
+  // Serialize policy 'subroutines'
+  if(!empty($sub_conf))
+    $iosxr_conf[] = implode("\n", $sub_conf);
+
+  // Serialize policies
+  if(!empty($policy_conf))
+    $iosxr_conf[] = implode("\n", $policy_conf);
 
   return true;
 }
