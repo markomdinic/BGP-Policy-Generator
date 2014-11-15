@@ -134,11 +134,21 @@ function vcs_commit($targets, $message)
           // Prepare message
           $message .= "\nChanges that have occured:\n\n".implode("\n", $diff)."\n";
       }
+      // From header
+      $headers = "From: ".$author." <".$email.">";
+      // Reply-To header, if defined
+      if($config['reply_to_email'] && !empty($config['reply_to_email'])) {
+        // Prepare recipients list
+        $reply_to = is_array($config['reply_to_email']) ?
+                      implode(',', $config['reply_to_email']):
+                      $config['reply_to_email'];
+        $headers .= "\r\nReply-To: ".$reply_to;
+      }
       // Send notification email
       mail($recipients,
            "[BGP Policy Generator] Policy templates updated",
            $message,
-           "From: ".$author." <".$email.">");
+           $headers);
     }
   }
 

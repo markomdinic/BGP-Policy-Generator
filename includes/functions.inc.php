@@ -344,13 +344,19 @@ function update_template($autotemplate, &$statusmsg="")
           // aggregation is disabled
           switch($p->getAttribute('aggregate')) {
             case 'true':
+            case 'full':
+            case 'all':
             case 'yes':
             case 'on':
             case '1':
-              $aggregate = true;
+              $aggregation = true;
+              break;
+            case 'overlapping':
+            case 'longer':
+              $aggregation = false;
               break;
             default:
-              $aggregate = false;
+              unset($aggregation);
               break;
           }
 
@@ -384,11 +390,11 @@ function update_template($autotemplate, &$statusmsg="")
             $prefix_list_items = array();
 
             // If aggregation is enabled ...
-            if($aggregate) {
+            if(isset($aggregation)) {
               switch($family) {
                 case 'inet':
                   // ... aggregate IPv4 prefixes
-                  $prefixes = aggregate_ipv4($prefixes);
+                  $prefixes = aggregate_ipv4($prefixes, $aggregation);
                   if(empty($prefixes))
                     continue 2;
                   break;

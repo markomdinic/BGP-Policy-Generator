@@ -376,9 +376,24 @@ but an optional string to prepend to the generated prefix list name.
                ASN(s) from a flat list of announced ASNs produced by recursively
                expanding as-set specified in the export attribute of peer's aut-num
                object.
- 'aggregate' - Indicates whether collected prefixes should be aggregated into largest
-               possible blocks prior to generating prefix lists. Works only on IPv4
-               at the moment. Can be 'yes' or 'no'.
+ 'aggregate' - Indicates whether collected prefixes should be aggregated into larger or
+               largest possible blocks prior to generating prefix lists. Works only on
+               IPv4 at the moment. It can be one of the following:
+
+                 'full'   - Unconditionaly aggregates prefixes into largest possible
+                            blocks. Resulting supernets will, of course, be completely
+                            valid, but may not exist as route objects in RIR's database
+                            as such.
+                 'longer' - Aggregates only longer prefixes that overlap with their
+                            supernets, but only if supernets are present in the list,
+                            and therefore registered as route objects in RIR's database.
+                            It effectively removes more specific prefixes, leaving only
+                            a subset of less specific supernets registered as route
+                            objects in RIR's database.
+                 'yes'    - This is now a legacy setting. For compatibility with older
+                            versions which featured only full aggregation, this is now
+                            an alias for 'full'.
+                 'no'     - No aggregation of any kind.
 
  'upto'      - Defines maximum prefix length for prefixes going into generated prefix
                list templates. Prefixes longer than 'upto' value are ignored and won't

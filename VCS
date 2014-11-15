@@ -46,6 +46,21 @@ VCS is controlled by just a few parameters in config.php:
                                It can be defined as a string or an array,
                                if configuring multiple recipients.
 
+  $config['reply_to_email']  - If you need to reply to notification emails
+                               to, say, notify others that you handled them,
+                               you might want to set Reply-To recipient(s).
+                               Otherwise, your reply would go to the sender
+                               of notification emails, which may not even
+                               be a valid recipient. You would, therefore,
+                               have to manually change the recipient(s) of
+                               your replies every time. When this parameter
+                               is used, your replies will be automatically
+                               set to go to these addresses, instead of
+                               the notification sender.
+
+                               It can be defined as a string or an array,
+                               if configuring multiple recipients.
+
   $config['notify_changes']  - Enables/disables notification emails.
                                Can be true or false.
 

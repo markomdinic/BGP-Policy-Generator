@@ -66,7 +66,7 @@ function git_add($path)
   if(empty($path) || (!is_dir($path) && !is_file($path)))
     return false;
 
-  return git('add', $path) !== FALSE ? true:false;
+  return git('add', '-A', $path) !== FALSE ? true:false;
 }
 
 function git_reset($path=NULL)

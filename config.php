@@ -18,6 +18,7 @@ $config['my_email'] = "root@localhost";
 
 // Notification parameters
 $config['notify_email'] = "you@yourdomain.net";
+$config['reply_to_email'] = "yourteam@yourdomain.net";
 $config['notify_changes'] = false;  // Send notification ?
 $config['notify_files'] = true;     // Include changed files ?
 $config['notify_detail'] = true;    // Include changes diff ?

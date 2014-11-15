@@ -183,7 +183,7 @@ function prefix_aggregator32($nonaggregated, $address_length=32)
 
   // Sort prefixes by network addresses in ascending order
   // to prevent searching for neighboring address blocks
-  // accross the prefix list
+  // across entire prefix list
   ksort($nonaggregated);
 
   // Get the first prefix in the list of sorted network addresses
@@ -275,7 +275,7 @@ function prefix_aggregator64($nonaggregated, $address_length=32)
 
   // Sort prefixes by network addresses in ascending order
   // to prevent searching for neighboring address blocks
-  // accross the prefix list
+  // across entire prefix list
   ksort($nonaggregated);
 
   // Get the first prefix in the list of sorted network addresses
@@ -347,7 +347,38 @@ function prefix_aggregator64($nonaggregated, $address_length=32)
   return prefix_aggregator64($aggregated);
 }
 
-function aggregate_ipv4($prefix_list)
+function filter_more_specific($nonaggregated, $address_length=32)
+{
+  // Sort prefixes by network addresses in ascending order
+  // to prevent searching for neighboring address blocks
+  // across entire prefix list
+  ksort($nonaggregated);
+
+  // Get the first prefix in the list of sorted network addresses
+  $first_network_address =  key($nonaggregated);
+  // False previous broadcast addresses to get the loop running
+  $prev_supernet_broadcast_address = $first_network_address - 1;
+
+  // This array will collect supernet prefixes
+  $aggregated = array();
+
+  foreach($nonaggregated as $current_network_address => $cidr) {
+    // Calculate this subnet's broadcast address
+    $current_broadcast_address = $current_network_address + (1 << ($address_length - $cidr)) - 1;
+    // Keep only subnets that fall outside previous supernet's range
+    if($prev_supernet_broadcast_address < $current_network_address ||
+       $prev_supernet_broadcast_address < $current_broadcast_address) {
+      // Prefix is a supernet - add it to the list ...
+      $aggregated[$current_network_address] = $cidr;
+      // Keep supernet's broadcast address
+      $prev_supernet_broadcast_address = $current_broadcast_address;
+    }
+  }
+
+  return $aggregated;
+}
+
+function aggregate_ipv4($prefix_list, $full=true)
 {
   // Prefixes are given as an array of strings in CIDR format and
   // will be converted to numeric format and placed in this array.
@@ -385,9 +416,17 @@ function aggregate_ipv4($prefix_list)
     $prefixes[$network] = $cidr;
   }
   // We are now ready to aggregate
-  $prefixes = (PHP_INT_SIZE == 4) ?
-                 prefix_aggregator32($prefixes):
-                 prefix_aggregator64($prefixes);
+  if($full) {
+    // Perform full prefix aggregation
+    $prefixes = (PHP_INT_SIZE == 4) ?
+                   prefix_aggregator32($prefixes):
+                   prefix_aggregator64($prefixes);
+  } else {
+    // Eliminate only more specific prefixes
+    // that overlap with less specific supernets
+    $prefixes = filter_more_specific($prefixes);
+  }
+  // Make sure we don't try to convert an empty list
   if(empty($prefixes))
     return;
   $aggregated_prefixes = array();
