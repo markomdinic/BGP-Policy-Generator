@@ -135,14 +135,14 @@ function vcs_commit($targets, $message)
           $message .= "\nChanges that have occured:\n\n".implode("\n", $diff)."\n";
       }
       // From header
-      $headers = "From: ".$author." <".$email.">";
+      $headers = "From: ".$author." <".$email.">\r\n";
       // Reply-To header, if defined
       if($config['reply_to_email'] && !empty($config['reply_to_email'])) {
         // Prepare recipients list
         $reply_to = is_array($config['reply_to_email']) ?
                       implode(',', $config['reply_to_email']):
                       $config['reply_to_email'];
-        $headers .= "\r\nReply-To: ".$reply_to;
+        $headers .= "Reply-To: ".$reply_to."\r\n";
       }
       // Send notification email
       mail($recipients,
