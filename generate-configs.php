@@ -25,7 +25,8 @@ function usage()
   echo(" --help|-h                      This help message\n");
   echo(" --before|-b <date>             Generate first configuration before this date\n");
   echo(" --after|-a <date>              Generate first configuration after this date\n");
-  echo(" --mail|-m [target_email]       Send generated configuration via email\n");
+  echo(" --mail|-m [email_addresses]    Send generated configuration via email\n");
+  echo(" --replyto|-r [email_addresses] Set Reply-To for generated configuration email\n");
   echo(" --file|-a <output_filename>    Write generated configuration to file\n\n");
   exit(255);
 }
@@ -111,6 +112,17 @@ while(count($argv) > 0) {
       // Supress output to stdout
       $suppress = true;
       break;
+    case '-r':
+    case '--replyto':
+      // If no email is given as argument ...
+      if(empty($argv[0]) || !preg_match('/@/', $argv[0]))
+        // ... use reply-to email from configuration
+        $reply_to = $config['reply_to_email'];
+      // Otherwise ...
+      else
+        // ... use argument as reply-to email
+        $reply_to = array_shift($argv);
+      break;
     case '-f':
     case '--file':
       // Get destination filename
@@ -157,20 +169,28 @@ if(!empty($filename)) {
 
 // If target email address is defined ...
 if(!empty($email)) {
-  $from = NULL;
+  // One or more recipients
+  $recipients = is_array($email) ?
+                  implode(",", $email):
+                  $email;
+  // Do we have a valid From address ?
   if(!empty($config['my_email'])) {
     if(!empty($config['my_name']))
-      $from = "From: ".$config['my_name']." <".$config['my_email'].">";
+      $headers = "From: ".$config['my_name']." <".$config['my_email'].">\r\n";
     else
-      $from = "From: ".$config['my_email'];
+      $headers = "From: ".$config['my_email']."\r\n";
   }
+  // Do we have Reply-To address(es) defined ?
+  if(!empty($reply_to))
+    $headers .= "Reply-To: ".(is_array($reply_to) ? implode(",", $reply_to):$reply_to)."\r\n";
+  // Format Subject field
   $subject = "[BGP Policy Generator] ".$platform." ".$type." ".$id;
-  // ... send generated configuration via email
-  if(mail($email, $subject, $conf_text, $from) === FALSE) {
-    echo("Failed to send generated configuration to ".$email."\n");
+  // Send generated configuration via email
+  if(mail($recipients, $subject, $conf_text, $headers) === FALSE) {
+    echo("Failed to send generated configuration to ".$recipients."\n");
     exit(255);
   }
-  echo("Successfully sent generated configuration to ".$email."\n");
+  echo("Successfully sent generated configuration to ".$recipients."\n");
 }
 
 // Dump generated config to stdout by default
