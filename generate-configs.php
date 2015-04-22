@@ -27,7 +27,7 @@ function usage()
   echo(" --after|-a <date>              Generate first configuration after this date\n");
   echo(" --mail|-m [email_addresses]    Send generated configuration via email\n");
   echo(" --replyto|-r [email_addresses] Set Reply-To for generated configuration email\n");
-  echo(" --file|-a <output_filename>    Write generated configuration to file\n\n");
+  echo(" --file|-f <output_filename>    Write generated configuration to file\n\n");
   exit(255);
 }
 
