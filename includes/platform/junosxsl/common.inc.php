@@ -18,9 +18,22 @@
 
 */
 
-function junosxsl_content_type(&$junos_conf)
+function junosxsl_format(&$junos_conf)
 {
-  return "text/xml";
+  // Serialize generated configuration
+  $conf_text = implode("\n", $junos_conf);
+  // Create empty DOM hierarchy
+  $doc = new DomDocument;
+  $doc->preserveWhiteSpace = false;
+  $doc->validateOnParse = true;
+  // Load generated XML into DOM
+  $doc->loadXML($conf_text);
+  // Make it pretty
+  $doc->formatOutput = true;
+  // Put it back nicely formatted
+  $conf_text = $doc->saveXML();
+
+  return array($conf_text, "text/xml");
 }
 
 function junosxsl_begin(&$junos_conf)

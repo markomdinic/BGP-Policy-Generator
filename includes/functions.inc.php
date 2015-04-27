@@ -784,33 +784,29 @@ function include_config(&$include, $type, $id)
   $include[$type][] = $id;
 }
 
-function format_generated_config(&$device_conf, $content_type=NULL)
+function format_generated_config($platform, &$device_conf)
 {
   // Nothing to do ?
   if(empty($device_conf))
     return;
 
-  // Serialize configuration
-  $conf_text = implode("\n", $device_conf)."\n";
+  // Optional function that returns
+  // device configuration in platform
+  // specific format and matching
+  // content type
+  $formatter = $platform.'_format';
+  if(is_callable($formatter))
+    // Call platform-specific formatter
+    // to prepare configuration for output
+    list($conf_text, $content_type) = $formatter($device_conf);
+  // Otherwise ...
+  else
+    // ... just serialize configuration
+    $conf_text = implode("\n", $device_conf)."\n";
+
   // Default content type is text/plain
   if(empty($content_type))
     $content_type = "text/plain";
-  // Detect content type and reformat, if possible
-  switch($content_type) {
-    case 'text/xml':
-    case 'text/xsl':
-    case 'text/xslt':
-      $doc = new DomDocument;
-      $doc->preserveWhiteSpace = false;
-      $doc->validateOnParse = true;
-      // Load XML as is
-      $doc->loadXML($conf_text);
-      // Make it pretty
-      $doc->formatOutput = true;
-      // Put it back nicely formatted
-      $conf_text = $doc->saveXML();
-      break;
-  }
 
   return array($conf_text, $content_type);
 }
@@ -927,16 +923,11 @@ function generate_config_by_id($platform, $type, $ids, &$device_conf=array())
       $common_end($device_conf);
   }
 
-  // Optional function that returns
-  // the required content type
-  $common_ct = $platform.'_content_type';
-  if(is_callable($common_ct))
-    $content_type = $common_ct($device_conf);
-
   // If external config storage wasn't given ...
   if(func_num_args() < 4)
-    // ... format generated configuration
-    return format_generated_config($device_conf, $content_type);
+    // ... return generated configuration
+    // in the platform-specific format
+    return format_generated_config($platform, $device_conf);
 
   // Success
   return true;
@@ -1046,15 +1037,9 @@ function generate_full_config($platform, $type)
   if(is_callable($common_end))
     $common_end($device_conf);
 
-  // Optional function that returns
-  // the required content type
-  $common_ct = $platform.'_content_type';
-  if(is_callable($common_ct))
-    $content_type = $common_ct($device_conf);
-
-  // Return generated config
-  // formatted for output
-  return format_generated_config($device_conf, $content_type);
+  // Return generated configuration
+  // in the platform-specific format
+  return format_generated_config($platform, $device_conf);
 }
 
 function generate_configs($platform, $type, $list=NULL, $time=NULL)
