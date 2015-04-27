@@ -1,7 +1,7 @@
 <?php
 /*
 
- Copyright (c) 2014 Marko Dinic <marko@yu.net>. All rights reserved.
+ Copyright (c) 2015 Marko Dinic <marko@yu.net>. All rights reserved.
 
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -17,18 +17,6 @@
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
-
-include_once $config['includes_dir'].'/platform/junosxsl/common.inc.php';
-
-function policy_content_type()
-{
-  return junosxsl_content_type();
-}
-
-function policy_begin(&$junos_conf)
-{
-  return junosxsl_begin($junos_conf);
-}
 
 function policy_generate($template, &$junos_conf, &$include)
 {
@@ -386,11 +374,6 @@ function policy_generate($template, &$junos_conf, &$include)
   }
 
   return true;
-}
-
-function policy_end(&$junos_conf)
-{
-  return junosxsl_end($junos_conf);
 }
 
 ?>

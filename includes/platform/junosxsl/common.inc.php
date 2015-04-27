@@ -1,7 +1,7 @@
 <?php
 /*
 
- Copyright (c) 2014 Marko Dinic <marko@yu.net>. All rights reserved.
+ Copyright (c) 2015 Marko Dinic <marko@yu.net>. All rights reserved.
 
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 */
 
-function junosxsl_content_type()
+function junosxsl_content_type(&$junos_conf)
 {
   return "text/xml";
 }

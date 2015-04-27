@@ -1,7 +1,7 @@
 <?php
 /*
 
- Copyright (c) 2014 Marko Dinic <marko@yu.net>. All rights reserved.
+ Copyright (c) 2015 Marko Dinic <marko@yu.net>. All rights reserved.
 
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -784,18 +784,14 @@ function include_config(&$include, $type, $id)
   $include[$type][] = $id;
 }
 
-function format_generated_config(&$device_conf, $config_type)
+function format_generated_config(&$device_conf, $content_type=NULL)
 {
   // Nothing to do ?
-  if(empty($device_conf) || empty($config_type))
+  if(empty($device_conf))
     return;
 
   // Serialize configuration
   $conf_text = implode("\n", $device_conf)."\n";
-  // Get content type if generator defines it
-  $func = $config_type.'_content_type';
-  if(is_callable($func))
-    $content_type = $func();
   // Default content type is text/plain
   if(empty($content_type))
     $content_type = "text/plain";
@@ -848,9 +844,10 @@ function generate_config_by_id($platform, $type, $ids, &$device_conf=array())
      empty($ids) || !isset($device_conf))
     return false;
 
-  // Format path to generator code
-  $include_file = $config['includes_dir'].'/platform/'.$platform.'/'.$type.'.inc.php';
-  if(!is_file($include_file))
+  // Format path to generator code for type-specific config elements
+  $include_generator = $config['includes_dir'].'/platform/'.$platform.'/'.$type.'.inc.php';
+  // This code is mandatory
+  if(!is_file($include_generator))
     return false;
 
   // Find the requested template by id
@@ -859,8 +856,15 @@ function generate_config_by_id($platform, $type, $ids, &$device_conf=array())
   if(!isset($element))
     return false;
 
+  // Format path to generator code for common config elements
+  $include_common = $config['includes_dir'].'/platform/'.$platform.'/common.inc.php';
+  // Common code is optional
+  if(is_file($include_common))
+    // If file exists - include it
+    include_once $include_common;
+
   // Include generator code
-  include_once $include_file;
+  include_once $include_generator;
 
   // Device-specific begin/end generators
   // should be called if we are starting
@@ -868,12 +872,17 @@ function generate_config_by_id($platform, $type, $ids, &$device_conf=array())
   $fresh = empty($device_conf) ? true:false;
 
   // Code to execute before generator,
-  // possibly to prepare config header,
+  // possibly to prepare config headers,
   // but only if we are starting fresh
   if($fresh) {
-    $begin = $type.'_begin';
-    if(is_callable($begin))
-      $begin($device_conf);
+    // Optional common config header
+    $common_begin = $platform.'_begin';
+    if(is_callable($common_begin))
+      $common_begin($device_conf);
+    // Optional type-specific section header
+    $section_begin = $type.'_begin';
+    if(is_callable($section_begin))
+      $section_begin($device_conf);
   }
 
   // This array will contain
@@ -908,15 +917,26 @@ function generate_config_by_id($platform, $type, $ids, &$device_conf=array())
   // possibly to create config footer,
   // but only if we started fresh
   if($fresh) {
-    $end = $type.'_end';
-    if(is_callable($end))
-      $end($device_conf);
+    // Optional type-specific section footer
+    $section_end = $type.'_end';
+    if(is_callable($section_end))
+      $section_end($device_conf);
+    // Optional common config footer
+    $common_end = $platform.'_end';
+    if(is_callable($common_end))
+      $common_end($device_conf);
   }
+
+  // Optional function that returns
+  // the required content type
+  $common_ct = $platform.'_content_type';
+  if(is_callable($common_ct))
+    $content_type = $common_ct($device_conf);
 
   // If external config storage wasn't given ...
   if(func_num_args() < 4)
     // ... format generated configuration
-    return format_generated_config($device_conf, $type);
+    return format_generated_config($device_conf, $content_type);
 
   // Success
   return true;
@@ -952,13 +972,21 @@ function generate_full_config($platform, $type)
   if(empty($platform) || empty($type))
     return false;
 
-  // Format path to generator code
-  $include_file = $config['includes_dir'].'/platform/'.$platform.'/'.$type.'.inc.php';
-  if(!is_file($include_file))
+  // Format path to generator code for type-specific config elements
+  $include_generator = $config['includes_dir'].'/platform/'.$platform.'/'.$type.'.inc.php';
+  // This code is mandatory
+  if(!is_file($include_generator))
     return false;
 
-  // Include generator code
-  include_once $include_file;
+  // Format path to generator code for common config elements
+  $include_common = $config['includes_dir'].'/platform/'.$platform.'/common.inc.php';
+  // This code is optional
+  if(is_file($include_common))
+    // If file exists, include it
+    include_once $include_common;
+
+  // Include generator code for type-specific elements
+  include_once $include_generator;
 
   // This array will contain
   // generated configuration
@@ -968,10 +996,18 @@ function generate_full_config($platform, $type)
   $include = array();
 
   // Code to execute before generator,
-  // possibly to prepare config header
-  $begin = $type.'_begin';
-  if(is_callable($begin))
-    $begin($device_conf);
+  // possibly to prepare common config
+  // header
+  $common_begin = $platform.'_begin';
+  if(is_callable($common_begin))
+    $common_begin($device_conf);
+
+  // Code to execute before generator,
+  // possibly to prepare type-specific
+  // config header
+  $section_begin = $type.'_begin';
+  if(is_callable($section_begin))
+    $section_begin($device_conf);
 
   // Process all template files
   // with generate() function
@@ -997,14 +1033,28 @@ function generate_full_config($platform, $type)
     return false;
 
   // Code to execute after generator,
-  // possibly to create config footer
-  $end = $type.'_end';
-  if(is_callable($end))
-    $end($device_conf);
+  // possibly to create type-specific
+  // config footer
+  $section_end = $type.'_end';
+  if(is_callable($section_end))
+    $section_end($device_conf);
+
+  // Code to execute after generator,
+  // possibly to create common config
+  // footer
+  $common_end = $platform.'_end';
+  if(is_callable($common_end))
+    $common_end($device_conf);
+
+  // Optional function that returns
+  // the required content type
+  $common_ct = $platform.'_content_type';
+  if(is_callable($common_ct))
+    $content_type = $common_ct($device_conf);
 
   // Return generated config
   // formatted for output
-  return format_generated_config($device_conf, $type);
+  return format_generated_config($device_conf, $content_type);
 }
 
 function generate_configs($platform, $type, $list=NULL, $time=NULL)
