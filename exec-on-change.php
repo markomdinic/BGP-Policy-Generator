@@ -21,7 +21,7 @@
 
 // Set memory limit high to avoid
 // errors with large data sets
-ini_set('memory_limit', '2048M');
+ini_set('memory_limit', '3584M');
 
 // This will hold our own configuration
 $base_dir = dirname(realpath(__FILE__));
@@ -41,6 +41,12 @@ include $config['includes_dir']."/functions.inc.php";
 // If no script is defined, do nothing
 if(empty($config['on_change']))
   exit(0);
+
+// Unless debug is set to full ...
+if(!isset($config['debug']) ||
+   $config['debug'] !== 'full')
+  // ... suppress PHP messages
+  error_reporting(~E_ALL);
 
 print $config['on_change']."\n";
 // Get changed files

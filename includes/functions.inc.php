@@ -179,18 +179,115 @@ function update_template($autotemplate, &$statusmsg="")
     // Make sure peer's ASN is always in AS<n> format
     $peer_as = $m[1];
 
+    // Use global whois servers by default
+    $whois_servers = NULL;
+
+    // Process per-policy whois server configuration
+    foreach($policy->getElementsByTagName('whois') as $whois) {
+
+      // Start a new list of per-policy whois servers
+      $server_list = array();
+
+      // Process whois servers parameters
+      foreach($whois->getElementsByTagName('server') as $server) {
+
+        // Start a new server parameters block
+        $whois_server = array();
+
+        // Whois server address is mandatory
+        $whois_host = $server->nodeValue;
+        if(empty($whois_host)) {
+          status_message("Autopolicy template ".$policy_id." has a misconfigured whois server.", $statusmsg);
+          continue;
+        }
+        $whois_server['server'] = $whois_host;
+
+        // Whois server port is optional
+        $whois_port = $server->getAttribute('port');
+        if(!empty($whois_port)) {
+          if(!is_port($whois_port)) {
+            status_message("Autopolicy template ".$policy_id." defines a whois server ".$whois_host." with invalid port \"".$whois_port."\".", $statusmsg);
+            // Try the next server
+            continue;
+          }
+          $whois_server['port'] = $whois_port;
+        }
+
+        // Whois address family is optional
+        $whois_family = $server->getAttribute('family');
+        if(!empty($whois_family))
+          $whois_server['family'] = $whois_family;
+
+        // Whois server type is optional
+        $whois_type = $server->getAttribute('type');
+        if(!empty($whois_type))
+          $whois_server['type'] = $whois_type;
+
+        // Whois source is optional
+        $whois_source = $server->getAttribute('source');
+        if(!empty($whois_source))
+          $whois_server['source'] = $whois_source;
+
+        // Whois server socket timeout is optional
+        $whois_sock_timeout = $server->getAttribute('sock-timeout');
+        if(!empty($whois_sock_timeout)) {
+          if(!is_positive($whois_sock_timeout)) {
+            status_message("Autopolicy template ".$policy_id." defines a whois server ".$whois_host." with invalid socket timeout \"".$whois_sock_timeout."\" !", $statusmsg);
+            // Try the next server
+            continue;
+          }
+          $whois_server['sock_timeout'] = $whois_sock_timeout;
+        }
+
+        // Whois server query timeout is optional
+        $whois_query_timeout = $server->getAttribute('query-timeout');
+        if(!empty($whois_query_timeout)) {
+          if(!is_positive($whois_query_timeout)) {
+            status_message("Autopolicy template ".$policy_id." defines a whois server ".$whois_host." with invalid query timeout \"".$whois_query_timeout."\" !", $statusmsg);
+            // Try the next server
+            continue;
+          }
+          $whois_server['query_timeout'] = $whois_query_timeout;
+        }
+
+        // Whois query size (number of RPSL objects per query) is optional
+        $whois_query_size = $server->getAttribute('query-size');
+        if(!empty($whois_query_size)) {
+          if(!is_positive($whois_query_size)) {
+            status_message("Autopolicy template ".$policy_id." defines a whois server ".$whois_host." with invalid query size \"".$whois_query_size."\" !", $statusmsg);
+            // Try the next server
+            continue;
+          }
+          $whois_server['query_size'] = $whois_query_size;
+        }
+
+        // Add whois server parameters to the per-policy server list
+        $server_list[] = $whois_server;
+      }
+
+      // If we have at least one whois server in the list ...
+      if(!empty($server_list))
+        // ... use per-policy whois servers
+        $whois_servers = $server_list;
+
+      // There can be only one servers section
+      break;
+    }
+
+    status_message("Autopolicy template ".$policy_id." is using ".(empty($whois_servers) ? "global":"per-policy")." whois servers.", $statusmsg);
+
     // To which protocol family should prefixes belong ?
     $family = $policy->getAttribute('family');
     switch($family) {
       case 'inet':
-        status_message("Fetching af inet prefixes announced by AS".$peer_as." to AS".$local_as." ...\n", $statusmsg);
+        status_message("Fetching af inet prefixes announced by AS".$peer_as." to AS".$local_as." ...", $statusmsg);
         // Get prefixes announced by <peer-as> to <local-as>
-        $announced = get_announced_ipv4_prefixes('AS'.$peer_as, 'AS'.$local_as);
+        $announced = get_announced_ipv4_prefixes('AS'.$peer_as, 'AS'.$local_as, $whois_servers);
         break;
       case 'inet6':
-        status_message("Fetching af inet6 prefixes announced by AS".$peer_as." to AS".$local_as." ...\n", $statusmsg);
+        status_message("Fetching af inet6 prefixes announced by AS".$peer_as." to AS".$local_as." ...", $statusmsg);
         // Get prefixes announced by <peer-as> to <local-as>
-        $announced = get_announced_ipv6_prefixes('AS'.$peer_as, 'AS'.$local_as);
+        $announced = get_announced_ipv6_prefixes('AS'.$peer_as, 'AS'.$local_as, $whois_servers);
         break;
       default:
         // Next policy
@@ -200,11 +297,11 @@ function update_template($autotemplate, &$statusmsg="")
     // No point going any further
     // if prefixes are missing
     if(empty($announced)) {
-      status_message("Got no af ".$family." prefixes from AS".$peer_as.".\n", $statusmsg);
+      status_message("Got no af ".$family." prefixes from AS".$peer_as.".", $statusmsg);
       return;
     }
 
-    status_message("AS".$peer_as." is announcing (af ".$family.") ".count(array_keys($announced))." autonomous systems.\n", $statusmsg);
+    status_message("AS".$peer_as." is announcing (af ".$family.") ".count(array_keys($announced))." autonomous systems.", $statusmsg);
 
     // This array will receive terms
     // built as strings in XML format
@@ -449,7 +546,7 @@ function update_template($autotemplate, &$statusmsg="")
             $num = $doc->save($config['templates_dir'].'/prefixlist/'.$prefix_list_name);
             if($num === FALSE) {
               // Abort at the first sign of trouble
-              status_message("Aborting: failed to write prefix list file ".$prefix_list_name.".\n", $statusmsg);
+              status_message("Aborting: failed to write prefix list file ".$prefix_list_name.".", $statusmsg);
               return;
             }
 
@@ -654,19 +751,19 @@ function update_template_by_id($id, &$log='')
   $ids = is_array($id) ? $id:array($id);
 
   foreach($ids as $id) {
-    status_message("Updating autopolicy template ".$id." ...\n", $log);
+    status_message("Updating autopolicy template ".$id." ...", $log);
 
     // Load specific autopolicy template
     $autotemplate = load_template($config['templates_dir'].'/autopolicy/'.$id);
     if(!isset($autotemplate)) {
-      status_message("Autopolicy template ".$id." not found.\n", $log);
+      status_message("Autopolicy template ".$id." not found.", $log);
       continue;
     }
 
     // Generate config templates from autopolicy template
     $template = update_template($autotemplate, $log);
     if(!isset($template)) {
-      status_message("Autopolicy ".$id." update failed.\n", $log);
+      status_message("Autopolicy ".$id." update failed.", $log);
       continue;
     }
     // Make XML output properly formatted
@@ -674,10 +771,10 @@ function update_template_by_id($id, &$log='')
     // Save updated template to the policy directory
     $template->save($config['templates_dir'].'/policy/'.$id);
 
-    status_message("Autopolicy ".$id." successfully updated.\n", $log);
+    status_message("Autopolicy ".$id." successfully updated.", $log);
   }
 
-  status_message("Done.\n", $log);
+  status_message("Done.", $log);
 
   return true;
 }
@@ -696,7 +793,7 @@ function update_all_templates(&$log='')
     return false;
   }
 
-  status_message("Updating all autopolicy templates ...\n", $log);
+  status_message("Updating all autopolicy templates ...", $log);
 
   // Process all autopolicy template files
   foreach($autotemplates as $filename => $autotemplate) {
@@ -712,7 +809,7 @@ function update_all_templates(&$log='')
     $template->save($config['templates_dir'].'/policy/'.$filename);
   }
 
-  status_message("Done.\n", $log);
+  status_message("Done.", $log);
 
   return true;
 }

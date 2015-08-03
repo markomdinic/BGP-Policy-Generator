@@ -50,19 +50,26 @@ function drop_privileges()
   }
 }
 
-function status_message($msg, &$log)
+function status_message($msg, &$log=NULL)
 {
   if(empty($msg))
     return '';
 
   // Show status message
-  echo($msg);
+  echo($msg."\n");
   // Accumulate messages in the log
   if(isset($log))
-    $log .= $msg;
-
-  return $msg;
+    $log .= $msg."\n";
 }
+
+function debug_message($msg, &$log=NULL)
+{
+  global $config;
+
+  if(isset($config['debug']) && $config['debug'])
+    status_message($msg, $log);
+}
+
 
 function is_sequential_array(&$array)
 {
@@ -80,12 +87,25 @@ function is_associative_array(&$array)
   return array_keys($array) !== range(0, count($array)-1);
 }
 
-function is_rpsl_object(&$object)
+function is_positive(&$value)
 {
-  if(!is_array($object))
+  if(empty($value))
     return false;
 
-  return array_keys($object) !== range(0, count($object)-1);
+  return (is_numeric($value) && $value >= 0) ? true:false;
+}
+
+function is_port(&$port)
+{
+  if(empty($port))
+    return false;
+
+  return (is_numeric($port) && $port >= 0 && $port <= 65535) ? true:false;
+}
+
+function is_rpsl_object(&$object)
+{
+  return is_associative_array($object);
 }
 
 function is_name($names)
@@ -120,6 +140,14 @@ function is_asn($asns)
   }
 
   return true;
+}
+
+function is_any($value)
+{
+  if(empty($value) || !is_string($value))
+    return false;
+
+  return preg_match('/^(?:[AR]S\-)?ANY$/i', $value) ? true:false;
 }
 
 function is_ipv4($prefixes)

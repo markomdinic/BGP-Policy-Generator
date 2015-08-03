@@ -24,6 +24,8 @@ if(!defined('AF_INET'))
 if(!defined('AF_INET6'))
   define('AF_INET6',      10);
 
+define('EAGAIN',          11);    // Try again
+define('EWOULDBLOCK',     11);    // Operation would block
 define('ENOTSOCK',        88);    // Socket operation on non-socket
 define('EDESTADDRREQ',    89);    // Destination address required
 define('EMSGSIZE',        90);    // Message too long

@@ -1,0 +1,31 @@
+<?xml version="1.0" standalone="yes"?> 
+<policies>
+    <policy id="ACCEPT-FROM-HE" peer-as="6939" family="inet">
+	<whois>
+	    <server port="43" type="irrd" source="ripe,arin,apnic,afrinic,radb" family="inet" sock-timeout="5" query-timeout="30">whois.radb.net</server>
+	    <server port="43" type="ripe" source="ripe" family="inet6,inet" sock-timeout="5" query-timeout="30" query-size="100">whois.ripe.net</server>
+	</whois>
+	<term action="permit" id="peers-prefixes">
+	    <match>
+	        <protocol>bgp</protocol>
+		<auto-prefix-list match="orlonger" include="yes" origin="^6939$" upto="24" aggregate="no"/>
+	    </match>
+	    <set>
+		<local-preference>300</local-preference>
+		<community action="add" id="peer-prefixes">65535:64777</community>
+		<community action="add" id="advertise-to-customers">65535:64800</community>
+	    </set>
+	</term>
+	<term action="permit" id="peers-customers-prefixes">
+	    <match>
+	        <protocol>bgp</protocol>
+		<auto-prefix-list match="orlonger" include="yes" origin="^(?!6939)\d+$" upto="24" aggregate="no"/>
+	    </match>
+	    <set>
+		<local-preference>200</local-preference>
+		<community action="add" id="peer-prefixes">65535:64777</community>
+		<community action="add" id="advertise-to-customers">65535:64800</community>
+	    </set>
+	</term>
+    </policy>
+</policies>

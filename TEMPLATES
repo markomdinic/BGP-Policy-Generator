@@ -476,3 +476,32 @@ generation is involved. You can manually define your templates any way you like
 without using any special features. Also, any manually defined <match> section or
 the entire <term> won't be affected by autopolicy behavior in other sections of
 the same template.
+
+Per-policy whois servers can be specified to override the global set of servers.
+They are defined using <server> tags within <whois> section which sits inside <policy>.
+Whois server's address is specified as <server> tag's value. Other (optional) server
+parameters are specified as <server> tag's options:
+
+  port
+  family
+  type
+  source
+  sock-timeout
+  query-timeout
+  query-size
+
+For details on whois servers and each of these parameters, see WHOIS document.
+Note, however, that these options have dashes ('-') in their names, unlike global
+server options which use underscores ('_'). A minor (and only) difference.
+
+Example:
+
+<policies>
+   <policy ...>
+      <whois>
+          <server port="43" family="inet6,inet" type="ripe" source="ripe">whois.ripe.net</server>
+          <server port="43" family="inet" type="irrd" source="ripe,radb">whois.ripe.net</server>
+      </whois>
+   </policy>
+</policies>
+

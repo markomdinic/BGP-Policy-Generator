@@ -1,15 +1,68 @@
 
-Whois is configured using following parameters:
+Multiple Whois servers can be defined both globally and per-policy. By default,
+global servers are used, but if autopolicy template defines it's own servers,
+they will be used instead of global ones. However, if there isn't at least one
+per-policy server with valid parameters, global servers will be used as backup.
 
-  $config['whois_server']            - Hostname or IPv4/IPv6 address of the server.
+Regardless of which set of servers is used, they are treated in the exact same way.
+
+They are queried in the order they were defined: the first server in the list is
+always queried first. If query produces no usable results, servers will be rotated
+by moving the first server to the back of the list and querying the next in line,
+which has now become first. This process will continue until usable information
+is retrieved or all servers have been exausted.
+
+Similarly, if a connection fails for whatever reason, failed server will be
+removed from the list for the duration of the update run and the next server in
+line will be queried. Servers are removed from the list only on transport errors
+ - those that break whois queries before any response is returned, even an empty
+one.
+
+Note that in order to get better performance, whois code will perform as many
+things in a single call as possible. For example, as-sets are recursively expanded
+into a list of ASNs in a single call and then that entire list is used to find
+associated route objects for every listed ASN in a single, multi-object query to
+a single whois server. However, if expanded list contains ASNs registered in other
+RIR databases, their prefixes won't be found on your current server.
+
+Detecting which prefixes are missing or separating ASNs by their source and querying
+different servers would involve additional queries and processing which would impact
+performance and is not supported at the moment.
+
+The solution is to query Whois servers that support multiple sources and mirror
+RIR databases (whois.radb.net, for example). Multiple sources can be configured
+per-server as a comma-separated list of source names and they will be searched in
+the order they were specified (order of preference). That way, a multi-object query
+to a single server will produce a list of objects registered in different databases.
+If an object is provided by more than one source, multiple versions of the same
+object will be returned, but only the most preferred source that defines that object
+will be used. In other words - the first occurence of the object that defines all
+required attributes will be used.
+
+Whois is globally configured as an array of servers at $config['whois']:
+
+  $config['whois'] = array( $server1, $server2, ... $serverN );
+
+or
+
+  $config['whois'][] = $server1;
+  $config['whois'][] = $server2;
+   ...
+  $config['whois'][] = $serverN;
+
+Each server is itself an associative array of parameters:
+
+  $serverN = array(
+
+      'server'                       - Hostname or IPv4/IPv6 address of the server.
 
                                        Default: whois.ripe.net.
 
-  $config['whois_port']              - TCP port of the whois service
+      'port'                         - TCP port of the whois service
 
                                        Default: 43
 
-  $config['whois_address_family']    - Address family or families used for connection.
+      'family'                       - Address family or families used for connection.
                                        If whois server is specified as an IP address,
                                        the address must match address family (obviously).
                                        If hostname is given, it may resolve to both
@@ -18,20 +71,19 @@ Whois is configured using following parameters:
                                        exclusively.
                                        Can be:
 
-                                         - AF_INET for IPv4 connection
-                                         - AF_INET6 for IPv6 connection
-                                         - array(AF_INET, AF_INET6) to allow both
-                                           IPv4 and IPv6 connection, preferring
-                                           IPv4 over IPv6.
-                                         - array(AF_INET6, AF_INET) to allow both
-                                           IPv4 and IPv6 connection, preferring
-                                           IPv6 over IPv4.
+                                         - 'inet' for IPv4 connection
+                                         - 'inet6' for IPv6 connection
+                                         - 'inet,inet6' to allow both
+                                            IPv4 and IPv6 connection,
+                                            preferring IPv4 over IPv6.
+                                         - 'inet6,inet' to allow both
+                                            IPv4 and IPv6 connection,
+                                            preferring IPv6 over IPv4.
 
-                                       Default: array(AF_INET6, AF_INET)
+                                       Default: 'inet6,inet'
 
-  $config['whois_type']              - RIPE-compatibile whois flavor. This option is
-                                       used to determine the way bulk mode is handled.
-                                       Can be:
+      'type'                         - This option is used to determine the way bulk mode
+                                       is handled. Can be:
 
                                          - 'ripe' for native RIPE server
                                          - 'irrd' for IRRd-based server
@@ -42,7 +94,7 @@ Whois is configured using following parameters:
 
                                        Default: 'ripe'
 
-  $config['whois_source']            - RPSL database source. When using RIPE's native
+      'source'                       - RPSL database source. When using RIPE's native
                                        server, there is no source other than 'RIPE',
                                        but IRRd based servers hosting or mirroring more
                                        than one database could have multiple objects
@@ -50,17 +102,57 @@ Whois is configured using following parameters:
                                        source. Therefore it is important to explicitly
                                        specify which source database to use.
 
+                                       Sources can be specified as a comma-separated
+                                       list of source names. In this case, multiple
+                                       sources will be searched in the order they were
+                                       specified.
+
                                        Default: 'ripe'
 
-  $config['whois_sock_timeout']      - Timeout (in seconds) for socket operations (like
+      'sock_timeout'                 - Timeout (in seconds) for socket operations (like
                                        connect, for example).
 
                                        Default: 5
 
-  $config['whois_query_timeout']     - Maximum time in seconds a single query can last.
+      'query_timeout'                - Maximum time in seconds a single query can last.
                                        With bulk queries, it's a single query for multiple
                                        objects and therefore a single timeout interval.
                                        When bulk mode is disabled, one query is issued
                                        per object, each having it's own timeout interval.
 
                                        Default: 300
+
+      'query_size'                   - The number of objects per query in bulk mode.
+                                       Low level whois code can always search multiple
+                                       objects, but how it handles communication with
+                                       a whois server differs between the normal and
+                                       the bulk mode.
+
+                                       In normal mode, objects are searched one by one,
+                                       establishing a new connection each time. Not very
+                                       efficient, but safe.
+
+                                       In bulk mode, objects are searched in groups of
+                                       query_size number of objects per query, over
+                                       a single persistent connection.
+
+                                       Different servers (assuming they support bulk
+                                       mode to begin with) can handle different number
+                                       of objects per query. This limit is not a hard
+                                       limit and it won't produce a clear warning or
+                                       error. Instead, going over the limit can have
+                                       unpredictable results which can be hard to
+                                       detect - like returning incomplete information.
+                                       Thus, incresing this number will improve network
+                                       performance, but will also increase the risk of
+                                       silent errors occuring.
+
+                                       Default: 50
+
+    )
+
+Per-policy servers are defined within autopolicy template. They have the same structure
+and use the same set of parameters. The only thing different is the syntax (autopolicy
+templates being XML files). For details on how to configure per-policy servers within
+autopolicy templates, see TEMPLATES document.
+
