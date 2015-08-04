@@ -29,8 +29,9 @@ Detecting which prefixes are missing or separating ASNs by their source and quer
 different servers would involve additional queries and processing which would impact
 performance and is not supported at the moment.
 
-The solution is to query Whois servers that support multiple sources and mirror
-RIR databases (whois.radb.net, for example). Multiple sources can be configured
+The solution is to query Whois servers that support multiple sources (whois.radb.net,
+for example). They have internally defined database search order which should be ok
+in most cases. However, if need be, multiple sources can be configured explicitly
 per-server as a comma-separated list of source names and they will be searched in
 the order they were specified (order of preference). That way, a multi-object query
 to a single server will produce a list of objects registered in different databases.
@@ -94,20 +95,25 @@ Each server is itself an associative array of parameters:
 
                                        Default: 'ripe'
 
-      'source'                       - RPSL database source. When using RIPE's native
+      'source'                       - RPSL database source(s). When using RIPE's native
                                        server, there is no source other than 'RIPE',
                                        but IRRd based servers hosting or mirroring more
                                        than one database could have multiple objects
                                        with same primary/lookup keys, but different
-                                       source. Therefore it is important to explicitly
+                                       source. In that case it is important to explicitly
                                        specify which source database to use.
+
+                                       Alternatively, we might want to limit the search
+                                       for a particular object to a particular source or
+                                       set of sources, instead of searching all databases
+                                       supported by server.
 
                                        Sources can be specified as a comma-separated
                                        list of source names. In this case, multiple
                                        sources will be searched in the order they were
                                        specified.
 
-                                       Default: 'ripe'
+                                       Default: none
 
       'sock_timeout'                 - Timeout (in seconds) for socket operations (like
                                        connect, for example).
