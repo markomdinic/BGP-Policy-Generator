@@ -114,7 +114,7 @@ function vcs_commit($targets, $message)
   if($res) {
     // 1. Notify configured recipients
     if($config['notify_changes'] && !empty($config['notify_email'])) {
-      // Prepare recipients list
+      // Prepare the list of notification recipients
       $recipients = is_array($config['notify_email']) ?
                       implode(',', $config['notify_email']):
                       $config['notify_email'];
@@ -138,7 +138,7 @@ function vcs_commit($targets, $message)
       $headers = "From: ".$author." <".$email.">\r\n";
       // Reply-To header, if defined
       if($config['reply_to_email'] && !empty($config['reply_to_email'])) {
-        // Prepare recipients list
+        // Prepare the list of reply recipients
         $reply_to = is_array($config['reply_to_email']) ?
                       implode(',', $config['reply_to_email']):
                       $config['reply_to_email'];

@@ -21,7 +21,7 @@
 
 // Set memory limit high to avoid
 // errors with large data sets
-ini_set('memory_limit', '3584M');
+ini_set('memory_limit', '3072M');
 
 // This will hold our own configuration
 $base_dir = dirname(realpath(__FILE__));

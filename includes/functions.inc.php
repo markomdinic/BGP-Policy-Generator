@@ -301,7 +301,7 @@ function update_template($autotemplate, &$statusmsg="")
       return;
     }
 
-    status_message("AS".$peer_as." is announcing (af ".$family.") ".count(array_keys($announced))." autonomous systems.", $statusmsg);
+    status_message("AS".$peer_as." is announcing (af ".$family.") ".count(array_keys($announced))." autonomous systems, ".array_sum(array_map("count", $announced))." prefixes.", $statusmsg);
 
     // This array will receive terms
     // built as strings in XML format

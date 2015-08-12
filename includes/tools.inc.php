@@ -416,7 +416,7 @@ function aggregate_ipv4($prefix_list, $full=true)
   // network_integer => cidr_integer format
   foreach(array_unique($prefix_list) as $prefix) {
     // Split prefix into network and cidr parts
-    list($network, $cidr) = explode('/', $prefix);
+    @list($network, $cidr) = explode('/', $prefix);
     if(empty($network) || empty($cidr))
       continue;
     // Confert dotted decimal into integer format

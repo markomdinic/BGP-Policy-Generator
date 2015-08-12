@@ -2,7 +2,7 @@
 <policies>
     <policy id="ACCEPT-FROM-HE" peer-as="6939" family="inet">
 	<whois>
-	    <server port="43" type="irrd" family="inet" sock-timeout="5" query-timeout="30" query-size="50">whois.radb.net</server>
+	    <server port="43" type="irrd" family="inet" sock-timeout="5" query-timeout="1800" query-size="1000">whois.radb.net</server>
 	</whois>
 	<term action="permit" id="peers-prefixes">
 	    <match>

@@ -1,29 +1,26 @@
 
 Multiple Whois servers can be defined both globally and per-policy. By default,
-global servers are used, but if autopolicy template defines it's own servers,
+global servers will be used, but if autopolicy template defines it's own servers,
 they will be used instead of global ones. However, if there isn't at least one
 per-policy server with valid parameters, global servers will be used as backup.
-
-Regardless of which set of servers is used, they are treated in the exact same way.
 
 They are queried in the order they were defined: the first server in the list is
 always queried first. If query produces no usable results, servers will be rotated
 by moving the first server to the back of the list and querying the next in line,
-which has now become first. This process will continue until usable information
+which has now become the first. This process will continue until usable information
 is retrieved or all servers have been exausted.
 
-Similarly, if a connection fails for whatever reason, failed server will be
-removed from the list for the duration of the update run and the next server in
-line will be queried. Servers are removed from the list only on transport errors
- - those that break whois queries before any response is returned, even an empty
-one.
+Similarly, if a connection fails for whatever reason, failed server will be removed
+from the list for the duration of the update run and the next server in line will
+be queried. Servers are removed from the list on configuration/transport errors -
+those that break whois queries before any response could be retrieved.
 
 Note that in order to get better performance, whois code will perform as many
 things in a single call as possible. For example, as-sets are recursively expanded
 into a list of ASNs in a single call and then that entire list is used to find
-associated route objects for every listed ASN in a single, multi-object query to
-a single whois server. However, if expanded list contains ASNs registered in other
-RIR databases, their prefixes won't be found on your current server.
+associated route objects for every listed ASN in a small number of multi-object
+queries to a single whois server. However, if list contains ASNs registered with
+other RIR databases, their prefixes won't be found on your current server.
 
 Detecting which prefixes are missing or separating ASNs by their source and querying
 different servers would involve additional queries and processing which would impact
@@ -57,7 +54,7 @@ Each server is itself an associative array of parameters:
 
       'server'                       - Hostname or IPv4/IPv6 address of the server.
 
-                                       Default: whois.ripe.net.
+                                       Default: none
 
       'port'                         - TCP port of the whois service
 
@@ -68,8 +65,9 @@ Each server is itself an associative array of parameters:
                                        the address must match address family (obviously).
                                        If hostname is given, it may resolve to both
                                        IPv4 and IPv6 address(es). This parameter will
-                                       determine which one will be tried first or used
+                                       determine which one will be used first or used
                                        exclusively.
+
                                        Can be:
 
                                          - 'inet' for IPv4 connection
@@ -88,45 +86,46 @@ Each server is itself an associative array of parameters:
 
                                          - 'ripe' for native RIPE server
                                          - 'irrd' for IRRd-based server
-                                         - NULL for generic whois server, which disables
+                                         - none for generic whois server, which disables
                                            bulk mode. Compatibility versus performance.
                                            Still needs to support RIPE-compatibile
                                            options, tho.
 
-                                       Default: 'ripe'
+                                       Default: none
 
       'source'                       - RPSL database source(s). When using RIPE's native
                                        server, there is no source other than 'RIPE',
                                        but IRRd based servers hosting or mirroring more
                                        than one database could have multiple objects
                                        with same primary/lookup keys, but different
-                                       source. In that case it is important to explicitly
-                                       specify which source database to use.
+                                       source. In that case, it might be important to
+                                       explicitly specify which source database to use.
 
                                        Alternatively, we might want to limit the search
                                        for a particular object to a particular source or
                                        set of sources, instead of searching all databases
                                        supported by server.
 
-                                       Sources can be specified as a comma-separated
-                                       list of source names. In this case, multiple
-                                       sources will be searched in the order they were
-                                       specified.
+                                       Reducing the set of sources to search, of course,
+                                       improves the search performance, but decreases
+                                       the chance of finding requested objects (unless
+                                       we know which source(s) might produce the desired
+                                       results).
 
-                                       Default: none
+                                       Sources can be specified as a comma-separated
+                                       list of source names. They will be searched in
+                                       the order they were specified.
+
+                                       Default: none (search all supported databases)
 
       'sock_timeout'                 - Timeout (in seconds) for socket operations (like
-                                       connect, for example).
+                                       connect, read, write, ... for example).
 
                                        Default: 5
 
-      'query_timeout'                - Maximum time in seconds a single query can last.
-                                       With bulk queries, it's a single query for multiple
-                                       objects and therefore a single timeout interval.
-                                       When bulk mode is disabled, one query is issued
-                                       per object, each having it's own timeout interval.
+      'query_timeout'                - Maximum time (in seconds) a single query can last.
 
-                                       Default: 300
+                                       Default: 1800 for bulk mode, 60 for normal mode
 
       'query_size'                   - The number of objects per query in bulk mode.
                                        Low level whois code can always search multiple
@@ -139,8 +138,7 @@ Each server is itself an associative array of parameters:
                                        efficient, but safe.
 
                                        In bulk mode, objects are searched in groups of
-                                       query_size number of objects per query, over
-                                       a single persistent connection.
+                                       query_size number of objects per query.
 
                                        Different servers (assuming they support bulk
                                        mode to begin with) can handle different number
@@ -153,7 +151,10 @@ Each server is itself an associative array of parameters:
                                        performance, but will also increase the risk of
                                        silent errors occuring.
 
-                                       Default: 50
+                                       In most cases, there is no reason to use anything
+                                       other than the default.
+
+                                       Default: 1000
 
     )
 

@@ -20,12 +20,269 @@
 
 include_once $config['includes_dir'].'/tools.inc.php';
 
+// ***************** LOW LEVEL RPSL OBJECT PARSING FUNCTIONS ******************
+
+function parse_aut_num($object)
+{
+  // Don't waste time ...
+  if(empty($object) ||
+     !(isset($object['export']) ||
+       isset($object['mp-export'])))
+    return;
+
+  // Begin constructing new aut-num object
+  $aut_num = array();
+
+/*
+  // Copy import attribute(s)
+  if(isset($object['import'])) {
+    $imports = is_array($object['import']) ?
+                 $object['import']:array($object['import']);
+    foreach($imports as $import) {
+      // Extract ASN we are importing from
+      if(preg_match('/from\s+([^\s:;#]+)/i', $import, $m))
+        $from = strtoupper($m[1]);
+      // Extract filter that defines what will be imported
+      if(preg_match('/accept\s+(?:\{\s*([^\{\}]+?)\s*\}|([^\s:;#]+))/i', $import, $m)) {
+        // Inline filter ?
+        if(!empty($m[1]))
+          // Split inline filter specification
+          // into an array of prefixes
+          $what = preg_split('/(?:\^\S*)?[^A-F\d\.:\/]+/i', $m[1]);
+        // AS, AS-SET, AS-ANY or ANY ?
+        elseif(!empty($m[2]))
+          // Make sure this is always uppercase
+          $what = strtoupper($m[2]);
+      }
+      // Store dumbed down version of import attribute
+      if(!empty($what))
+        $aut_num['import'][$from] = $what;
+    }
+  }
+*/
+  // Copy export attribute(s)
+  if(isset($object['export'])) {
+    $exports = is_array($object['export']) ?
+                 $object['export']:array($object['export']);
+    foreach($exports as $export) {
+      // Extract ASN we are exporting to
+      if(preg_match('/to\s+([^\s:;#]+)/i', $export, $m))
+        $to = strtoupper($m[1]);
+      // Extract filter that defines what will be exported
+      if(preg_match('/announce\s+(?:\{\s*([^\{\}]+?)\s*\}|([^\s:;#]+))/i', $export, $m)) {
+        // Inline filter ?
+        if(!empty($m[1]))
+          // Split inline filter specification
+          // into an array of prefixes
+          $what = preg_split('/(?:\^\S*)?[^A-F\d\.:\/]+/i', $m[1]);
+        // AS, AS-SET, AS-ANY or ANY ?
+        elseif(!empty($m[2]))
+          // Make sure this is always uppercase
+          $what = strtoupper($m[2]);
+      }
+      // Store dumbed down version of export attribute
+      if(!empty($what))
+        $aut_num['export'][$to] = $what;
+    }
+  }
+/*
+  // Copy mp-import attribute(s)
+  if(isset($object['mp-import'])) {
+    $imports = is_array($object['mp-import']) ?
+                 $object['mp-import']:array($object['mp-import']);
+    foreach($imports as $import) {
+      // Extract ASN we are importing from
+      if(preg_match('/from\s+([^\s:;#]+)/i', $import, $m))
+        $from = strtoupper($m[1]);
+      // Extract filter that defines what will be imported
+      if(preg_match('/accept\s+(?:\{\s*([^\{\}]+?)\s*\}|([^\s:;#]+))/i', $import, $m)) {
+        // Inline filter ?
+        if(!empty($m[1]))
+          // Split inline filter specification
+          // into an array of prefixes
+          $what = preg_split('/(?:\^\S*)?[^A-F\d\.:\/]+/i', $m[1]);
+        // AS, AS-SET, AS-ANY or ANY ?
+        elseif(!empty($m[2]))
+          // Make sure this is always uppercase
+          $what = strtoupper($m[2]);
+      }
+      // Store dumbed down version of import attribute
+      if(!empty($what))
+        $aut_num['mp-import'][$from] = $what;
+    }
+  }
+*/
+  // Copy mp-export attribute(s)
+  if(isset($object['mp-export'])) {
+    $exports = is_array($object['mp-export']) ?
+                 $object['mp-export']:array($object['mp-export']);
+    foreach($exports as $export) {
+      // Extract ASN we are exporting to
+      if(preg_match('/to\s+([^\s:;#]+)/i', $export, $m))
+        $to = strtoupper($m[1]);
+      // Extract filter that defines what will be exported
+      if(preg_match('/announce\s+(?:\{\s*([^\{\}]+?)\s*\}|([^\s:;#]+))/i', $export, $m)) {
+        // Inline filter ?
+        if(!empty($m[1]))
+          // Split inline filter specification
+          // into an array of prefixes
+          $what = preg_split('/(?:\^\S*)?[^A-F\d\.:\/]+/i', $m[1]);
+        // AS, AS-SET, AS-ANY or ANY ?
+        elseif(!empty($m[2]))
+          // Make sure this is always uppercase
+          $what = strtoupper($m[2]);
+      }
+      // Store dumbed down version of export attribute
+      if(!empty($what))
+        $aut_num['mp-export'][$to] = $what;
+    }
+  }
+
+  // Object is not complete ?
+  if(empty($aut_num) ||
+     !(isset($aut_num['export']) ||
+       isset($aut_num['mp-export'])))
+    return;
+
+  // Add the rest of attributes of interest
+  $aut_num['aut-num'] = strtoupper($object['aut-num']);
+
+  // Done
+  return $aut_num;
+}
+
+function parse_as_set($object)
+{
+  // Don't waste time ...
+  if(empty($object) ||
+     !(isset($object['as-set']) &&
+       isset($object['members'])))
+    return;
+
+  // Raw member attributes
+  $raw_members = is_array($object['members']) ?
+                   $object['members']:array($object['members']);
+
+  // Parsed member attributes
+  $parsed_members = array();
+
+  // Parse raw member attributes
+  foreach($raw_members as $member) {
+    // Skip parsing errors
+    if(empty($member))
+      continue;
+    // String might contain comma-separated members list
+    foreach(preg_split('/[,;:]/', strtoupper($member)) as $member) {
+      // Strip leading and trailing trash
+      if(!preg_match('/([^\s#]+)/', $member, $m))
+        continue;
+      // Store parsed member
+      if(!empty($m[1]))
+        // By storing members as array keys
+        // we eliminate duplicate entries
+        $parsed_members[$m[1]] = true;
+    }
+  }
+
+  if(empty($parsed_members))
+    return;
+
+  // Format and return final object
+  return array(
+    'as-set' => strtoupper($object['as-set']),
+    'members' => array_keys($parsed_members)
+  );
+}
+
+function parse_route_set($object)
+{
+  // Don't waste time ...
+  if(empty($object) ||
+     !(isset($object['route-set']) &&
+       isset($object['members'])))
+    return;
+
+  // Raw member attributes
+  $raw_members = is_array($object['members']) ?
+                   $object['members']:array($object['members']);
+
+  // Parsed member attributes
+  $parsed_members = array();
+
+  // Parse raw member attributes
+  foreach($raw_members as $member) {
+    // Skip parsing errors
+    if(empty($member))
+      continue;
+    // String might contain comma-separated members list
+    foreach(preg_split('/(?:\^[^,\s]*)?\s*[,\s]\s*/', strtoupper($member)) as $member) {
+      // Strip leading and trailing trash
+      if(!preg_match('/([^\s#]+)/', $member, $m))
+        continue;
+      // Store parsed member
+      if(!empty($m[1]))
+        // By storing members as array keys
+        // we eliminate duplicate entries
+        $parsed_members[$m[1]] = true;
+    }
+  }
+
+  if(empty($parsed_members))
+    return;
+
+  // Format and return final object
+  return array(
+    'route-set' => strtoupper($object['route-set']),
+    'members' => array_keys($parsed_members)
+  );
+}
+
+function parse_route($object)
+{
+  // Don't waste time ...
+  if(empty($object) ||
+     !(isset($object['route']) &&
+       isset($object['origin'])))
+    return;
+
+  return array(
+    'route' => $object['route'],
+    'origin' => strtoupper($object['origin'])
+  );
+}
+
+function parse_route6($object)
+{
+  // Don't waste time ...
+  if(empty($object) ||
+     !(isset($object['route6']) &&
+       isset($object['origin'])))
+    return;
+
+  return array(
+    'route' => strtolower($object['route']),
+    'origin' => strtoupper($object['origin'])
+  );
+}
+
 // ************************ LOW LEVEL WHOIS FUNCTIONS *************************
 
-function whois_execute($server, $search, $options='')
+function whois_query_server($server, $search_objects, $object_type=NULL, $inverse_lookup_attr=NULL)
 {
-  // Don't waste my time ...
-  if(empty($search) || empty($server) || !is_array($server))
+  // If search string(s) are missing ...
+  if(empty($search_objects))
+    // ... return an empty result
+    return;
+
+  // Make sure search is always an array
+  // even if it contains a single element
+  if(!is_array($search_objects))
+    $search_objects = array($search_objects);
+
+  // If Whois server parameters are missing,
+  // explicitly return FALSE, to signal
+  // that something went wrong
+  if(empty($server) || !is_array($server))
     return false;
 
   // Whois server host
@@ -35,47 +292,6 @@ function whois_execute($server, $search, $options='')
     return false;
 
   $host = strtolower($host);
-
-  // Whois server TCP port
-  // (default: 43)
-  $port = (!empty($server['port'])) ?
-              $server['port']:43;
-
-  // Address families for connection ('inet', 'inet6')
-  // (default: 'inet6,inet')
-  foreach(explode(',', (!empty($server['family'])) ? $server['family']:'inet6,inet') as $af) {
-    switch(strtolower(trim($af))) {
-      case 'inet':
-        $address_families[] = AF_INET;
-        break;
-      case 'inet6':
-        $address_families[] = AF_INET6;
-        break;
-      default:
-        debug_message("Invalid address family \"".trim($af)."\". Check your configuration ?");
-        return false;
-    }
-  }
-
-  // Whois server type ('irrd', 'ripe')
-  // (default: 'ripe')
-  $type = (!empty($server['type'])) ?
-              $server['type']:"ripe";
-
-  // Socket operations (connect/read/write) timeout
-  // (default: 5 seconds)
-  $socket_timeout = (!empty($server['sock_timeout'])) ?
-                        $server['sock_timeout']:5;
-
-  // Query timeout (max time single query can last)
-  // (default: 300 seconds)
-  $query_timeout = (!empty($server['query_timeout'])) ?
-                       $server['query_timeout']:300;
-
-  // Query size (number of objects per query)
-  // (default: 50)
-  $query_size = (!empty($server['query_size'])) ?
-                       $server['query_size']:50;
 
   // List of whois server addresses should persist
   // between calls in order to act as a DNS cache
@@ -124,14 +340,52 @@ function whois_execute($server, $search, $options='')
       return false;
   }
 
-  // Determine if and how to begin and end
-  // persistent connection (bulk mode)
-  switch($type) {
+  // Whois server TCP port
+  // (default: 43)
+  $port = is_port($server['port']) ?
+            $server['port']:43;
+
+  // Address families for connection ('inet', 'inet6')
+  // (default: 'inet6,inet')
+  foreach(explode(',', (!empty($server['family'])) ? $server['family']:'inet6,inet') as $af) {
+    switch(strtolower(trim($af))) {
+      case 'inet':
+        $address_families[] = AF_INET;
+        break;
+      case 'inet6':
+        $address_families[] = AF_INET6;
+        break;
+      default:
+        debug_message("Invalid address family \"".trim($af)."\". Check your configuration ?");
+        return false;
+    }
+  }
+
+  // Socket operations (connect/read/write) timeout
+  // (default: 5 seconds)
+  $socket_timeout = is_positive($server['sock_timeout']) ?
+                      $server['sock_timeout']:5;
+
+  // Timeout parameter for socket_set_option SO_SNDTIMEO and SO_RCVTIMEO
+  $snd_rcv_timeout = array('sec' => $socket_timeout, 'usec' => 0);
+
+  // Whois query size (max number of objects per query in bulk mode)
+  // (default: 1000)
+  $query_size = is_positive($server['query_size']) ?
+                  $server['query_size']:1000;
+
+  // Query timeout (max time a single query can last)
+  // (default query timeout in bulk mode is 30 min)
+  $query_timeout = 1800;
+
+  // Whois server type ('irrd', 'ripe')
+  // (default: none)
+  switch($server['type']) {
     // Whois server is 100% RIPE compatibile
-    // (which is whois.ripe.net only, AFAIK)
     case 'ripe':
-      $begin = "-k";
-      $end = "-k";
+      // Enable bulk mode
+      $begin = "-k\n";
+      $end = "-k\n";
       debug_message("Using RIPE-compatibile bulk query mode.");
       break;
     // Whois server is based on IRRd software.
@@ -139,48 +393,75 @@ function whois_execute($server, $search, $options='')
     // part, but persistant connection mode is
     // handled slightly differently
     case 'irrd':
-      $begin = "!!";
-      $end = "q";
+      // Enable bulk mode
+      $begin = "!!\n";
+      $end = "q\n";
       debug_message("Using irrd-compatibile bulk query mode.");
       break;
+    // Other/unknown/'traditional' whois server
     default:
+      // Normal mode - no bulk mode by default
+      $begin = "";
+      $end = "";
+      // Force a single object per query in normal mode
+      $query_size = 1;
+      // Default query timeout in normal mode is 1 min
+      $query_timeout = 60;
       debug_message("Using normal query mode.");
       break;
   }
 
+  // Use user-defined query timeout, if any
+  if(is_positive($server['query_timeout']))
+    $query_timeout = $server['query_timeout'];
+
+  //
+  // Leave out contact information
+  // to avoid RIPE's daily limit ban:
+  //
+  //   http://www.ripe.net/data-tools/db/faq/faq-db/why-did-you-receive-the-error-201-access-denied
+  //
+  $options = '-r';
+
+  // Preferred whois source
+  if(!empty($server['source'])) {
+    $sources = array();
+    // Break down this comma-separated list, in case
+    // it contains whitespaces (usually around commas)
+    foreach(explode(',', $server['source']) as $source)
+      $sources[] = strtolower(trim($source));
+    // Rebuild comma-separated list, without whitespaces
+    $options .= ' -s'.implode(',', $sources);
+  }
+
+  // Preferred object type
+  if(!empty($object_type))
+    $options .= ' -T'.$object_type;
+
+  // Inverse lookup by this attribute
+  if(!empty($inverse_lookup_attr))
+    $options .= ' -i'.$inverse_lookup_attr;
+
   // Prepared queries will be stored here
-  // and then taken from this array and
-  // executed in the same order in which
-  // they were added
   $queries = array();
 
-  // Make sure search is always an array
-  // even if it contains a single element
-  if(!is_array($search))
-    $search = array($search);
-
   // If bulk mode is enabled multiple queries will be executed
-  // over a single persistent connection, query_size objects
-  // per query. Without bulk mode, each query references a single
-  // object, opening and closing a connection every time
-  for($prepared = 0, $step = (!empty($begin) && !empty($end)) ? $query_size:1, $num_obj = sizeof($search);
-      $prepared < $num_obj;
-      $prepared += $step)
-    // If bulk mode is enabled, prepare a query of query_size
-    // number of objects. Otherwise, prepare a single object.
-    // In either case, each RPSL object will have whois server
-    // options prepended to it's name
-    $queries[] = $options." ".implode("\n".$options." ", array_slice($search, $prepared, $step))."\n";
-
-  // This will hold the response to our search
-  // either retrieved all at once, in bulk mode
-  // or built by fetching and appending object
-  // by object, in default mode
-  $response = '';
+  // query_size number of objects per query. In normal mode,
+  // there is a single object per query, single query per
+  // connection
+  for($prepared = 0, $num_obj = sizeof($search_objects); $prepared < $num_obj; $prepared += $query_size)
+    // Prepare a query of query_size number of objects.
+    $queries[] = $begin.$options." ".implode("\n".$options." ", array_slice($search_objects, $prepared, $query_size))."\n".$end;
 
   debug_message("Querying server ".$host." ...");
 
-  // First, we need to connect
+  // Parsed objects go here
+  $objects = array();
+
+  // Required by socket_select()
+  $none = NULL;
+
+  // Not yet connected
   $sock = false;
 
   // Run all queries
@@ -195,324 +476,340 @@ function whois_execute($server, $search, $options='')
         // by this whois server
         if(!isset($addrs[$host][$af]))
           continue;
-        // Determine connect method
-        switch($af) {
-          case AF_INET:
-            // Establish TCP connection to whois server over IPv4
-            $sock = stream_socket_client("tcp://".$addrs[$host][$af].":".$port, $errno, $errstr, $socket_timeout);
-            if($sock !== FALSE)
-              break 2;
+        // Create a TCP socket
+        $sock = socket_create($af, SOCK_STREAM, SOL_TCP);
+        if($sock === FALSE)
+          continue;
+        // Set socket operations timeout
+        socket_set_option($sock, SOL_SOCKET, SO_RCVTIMEO, $snd_rcv_timeout);
+        socket_set_option($sock, SOL_SOCKET, SO_SNDTIMEO, $snd_rcv_timeout);
+        // Make socket non blocking
+        socket_set_nonblock($sock);
+        // Connect attempts cannot go on
+        // beyond connect_deadline
+        $connect_deadline = time() + $socket_timeout;
+        // Keep trying to connect until timeout
+        while(time() < $connect_deadline) {
+          // Initial call will start a connect operation,
+          // while the subsequent calls will just return
+          // the status of the initiated connect operation
+          if(@socket_connect($sock, $addrs[$host][$af], $port) !== FALSE)
+            // If connected successfully, we can proceed
+            break 2;
+          // On error ...
+          if(!in_array(socket_last_error($sock), array(0, EALREADY, EINPROGRESS)))
+            // ... abort current connect operation
+            // and try the next address family
             break;
-          case AF_INET6:
-            // Establish TCP connection to whois server over IPv6
-            $sock = stream_socket_client("tcp://[".$addrs[$host][$af]."]:".$port, $errno, $errstr, $socket_timeout);
-            if($sock !== FALSE)
-              break 2;
-            break;
-          default:
-            return false;
+          // If a connect operation is in progress,
+          // wait a bit and then go back to check
+          // for status, until operation is complete
+          // or we break the connect deadline
+          sleep(1);
         }
+        // Not connected
+        $sock = false;
       }
 
-      // Connection failed for whatever reason ?
+      // Failed to connect ?
       if($sock === FALSE)
         // Abort !
         return false;
 
-      // Make connection non blocking
-      stream_set_blocking($sock, 0);
-
-      // If bulk mode is enabled ...
-      if(!empty($begin) && !empty($end)) {
-        // ... begin persistent connection
-        if(fwrite($sock, $begin."\n") === FALSE) {
-          fclose($sock);
-          return false;
-        }
-      }
+      // Clear previous socket errors
+      socket_clear_error($sock);
 
     }
 
     // A single query cannot last
-    // longer than query_timeout
+    // longer than query_timeout,
+    // that is, beyond query_deadline
     $query_deadline = time() + $query_timeout;
 
-    $null = NULL;
-
-    // Send query to whois server
-    for($total_sent = 0, $sent = 0, $query_length = strlen($query);
+    // Send whois query
+    for($sent = 0, $total_sent = 0, $query_length = strlen($query);
         $total_sent < $query_length;
-        $total_sent += $sent, $sent = 0) {
+        $total_sent += $sent) {
+
       // Query timeout ?
       if(time() > $query_deadline) {
-        fclose($sock);
+        debug_message("Query timed out.");
+        socket_shutdown($sock, 2);
+        socket_close($sock);
         return false;
       }
-      // Make a list of sockets to monitor
-      // for write readiness, containing
-      // our one and only socket
+
+      // Prepare socket for monitoring
       $write_socks = array($sock);
-      // Wait for our socket to become ready to send query
-      $num_ready = stream_select($$null, $write_socks, $null, 1);
+
+      // Wait for our socket to become ready,
+      // but no longer than 1 second
+      $num_ready = socket_select($none, $write_socks, $none, 1);
+
       // Error ?
       if($num_ready === FALSE) {
-        fclose($sock);
+        socket_close($sock);
         return false;
       }
-      // Socket ready for writing ...
-      // (should be most of the time)
-      if($num_ready > 0) {
-        // Send in 4K blocks
-        $sent = fwrite($sock, substr($query, $total_sent), 4096);
-        // Error ?
-        if($sent === FALSE) {
-          fclose($sock);
-          return false;
-        }
+
+      // Connection is idle ?
+      if($num_ready == 0)
+        continue;
+
+      // Send as much as possible in a single call
+      $sent = socket_send($sock, substr($query, $total_sent), $query_length - $total_sent, 0);
+
+      // Error ?
+      if($sent === FALSE) {
+        socket_close($sock);
+        return false;
       }
+
     }
 
-    // Receive response from whois server
-    while(!feof($sock)) {
+    // Prepare response data storage
+    $response = "";
+
+    // Prepare object parsing variables
+    $object = NULL;
+    $type = NULL;
+    $key = NULL;
+    $attr = NULL;
+    $value = NULL;
+    $skip = false;
+
+    // Raise our receive & parse flag
+    $receive = true;
+
+    // Read and parse whois response
+    while($receive) {
+
       // Query timeout ?
       if(time() > $query_deadline) {
-        fclose($sock);
+        debug_message("Query timed out.");
+        socket_shutdown($sock, 2);
+        socket_close($sock);
         return false;
       }
-      // Make a list of sockets to monitor
-      // for read readiness, containing
-      // our one and only socket
+
+      // Prepare socket for monitoring
       $read_socks = array($sock);
-      // Wait for our socket to become ready to be read
-      $num_ready = stream_select($read_socks, $null, $null, 1);
+
+      // Wait for our socket to become ready,
+      // but no longer than 1 second
+      $num_ready = socket_select($read_socks, $none, $none, 1);
+
       // Error ?
       if($num_ready === FALSE) {
-        fclose($sock);
+        socket_close($sock);
         return false;
       }
-      // We got everything we could
-      // if connection is idle
+
+      // Connection is idle ?
       if($num_ready == 0)
-        break;
-      // Get a line of response
-      $line = fgets($sock);
-      // Socket closed ?
-      if($line === FALSE) {
-        // In normal mode, server has closed
-        // the connection after delivering
-        // the response
-        if(empty($begin) || empty($end))
-          break;
-        // In bulk mode this shouldn't happen
-        // since we are supposed to explicitly
-        // end the bulk mode ourselves, so,
-        // treat it as error
-        fclose($sock);
-        return false;
+        continue;
+
+      // Socket is ready, there's has data to be read
+
+      // Drain the socket
+      while($receive) {
+
+        // Get a part of response
+        $num = socket_recv($sock, $buffer, 1000000, 0);
+
+        // Read failed ?
+        if($num === FALSE) {
+          // What exactly happened ?
+          switch(socket_last_error($sock)) {
+            // Nothing to read at the moment ...
+            case EWOULDBLOCK:
+              break 2;
+            // Connection closed ...
+            case ECONNRESET:
+              break;
+            default:
+              // Otherwise it is an error
+              socket_close($sock);
+              return false;
+          }
+        }
+
+        // If we recived data ...
+        if($num > 0) {
+          // ... append it to the rest of response data
+          $response .= $buffer;
+        // If there is no more data to read ...
+        } else {
+          // ... in case last returned object was not terminated
+          // with a trailing empty line, we will insert an empty
+          // line to explicitly mark the end of current object
+          $response = "\n";
+          // ... and we are done, drop the flag, end loop(s)
+          $receive = false;
+        }
+
+        // Split response data into lines, if possible.
+        // Resulting array will have N+1 elements, where
+        // N is the number of complete lines, and +1
+        // is the last, incomplete line
+        $lines = explode("\n", $response);
+
+        // Once we parse extracted lines, we will resume
+        // accumulating response data from the last,
+        // incomplete line
+        $response = array_pop($lines);
+
+        // Parse extacted lines
+        foreach($lines as $line) {
+
+          // Object ends on an empty line
+          if($line === "") {
+            // If object type and raw object data exist ...
+            if(!empty($type) && !empty($object)) {
+              // ... look for parser for that particular object type
+              $parser = 'parse_'.str_replace('-', '_', $type);
+              // If parser exists ...
+              if(function_exists($parser))
+                // ... invoke it to replace raw object
+                // with a more refined, parsed form
+                $object = call_user_func($parser, $object);
+            }
+            // If object and it's primary key are defined ...
+            if(!empty($key) && !empty($object)) {
+              // ... and object already exists in the list ...
+              if(isset($objects[$key])) {
+                // ... and is already an array ...
+                if(is_sequential_array($objects[$key]))
+                  // ... add it along with other objects
+                  // with the same primary/lookup key
+                  $objects[$key][] = $object;
+                // Otherwise, convert list entry to array ...
+                else
+                  // ... containing both existing and the new object
+                  $objects[$key] = array($objects[$key], $object);
+              // If object isn't in the list ...
+              } else
+                // ... just add it
+                $objects[$key] = $object;
+            }
+            // Reset per-object variables
+            $object = NULL;
+            $type = NULL;
+            $key = NULL;
+            $attr = NULL;
+            $value = NULL;
+            $skip = false;
+            continue;
+          }
+
+          // Some part of this processing loop determined
+          // that current object should be skipped ...
+          if($skip)
+            continue;
+
+          // Skip comments
+          if(preg_match('/^\s*%/', $line))
+            continue;
+
+          // Scan current line looking for "attribute: value"
+          if(preg_match('/^([^\s:]+):\s*(.*)$/', $line, $m)) {
+            $attr = strtolower($m[1]);
+            switch($attr) {
+              // Pick attributes we need
+              case 'aut-num':
+              case 'import':
+              case 'export':
+              case 'mp-import':
+              case 'mp-export':
+              case 'as-set':
+              case 'route-set':
+              case 'route6-set':
+              case 'members':
+              case 'route':
+              case 'route6':
+              case 'origin':
+                $value = $m[2];
+                break;
+              // Skip attributes we don't need
+              default:
+                $attr = NULL;
+                continue 2;
+            }
+
+            // If no object is currently in construction ...
+            if(empty($object) && !empty($attr)) {
+              // ... and the specific attribute was requested,
+              // but doesn't match the source object type ...
+              if(!empty($object_type) && $object_type != $attr) {
+                // ... skip source lines until the next object
+                $skip = true;
+                continue;
+              }
+              // Otherwise, begin constructing a new object
+              // and remember object's type and primary key
+              $object = array();
+              $type = $attr;
+              $key = $value;
+            }
+
+            // Store attribute into the object in construction
+            if(is_array($object)) {
+              // If attribute already exists ...
+              if(isset($object[$attr])) {
+                // ... and is already an array ...
+                if(is_array($object[$attr]))
+                  // ... add value along with others
+                  $object[$attr][] = $value;
+                // Otherwise, convert it to array ...
+                else
+                  // ... which will now hold both
+                  // previous and the current value
+                  $object[$attr] = array($object[$attr], $value);
+              // If attribute doesn't exist, create it
+              } else
+                $object[$attr] = $value;
+            }
+
+          // Line is a continuation of a multiline value ?
+          } elseif(!empty($attr)) {
+
+            // Remove trash from the current line
+            $value = trim($line);
+            // Append trimmed current line to the existing attribute's value
+            if(!empty($object) && is_array($object)) {
+              // If attribute is an array ...
+              if(is_array($object[$attr])) {
+                // ... and array isn't empty
+                // (shouldn't be at this point) ...
+                $last = count($object[$attr]) - 1;
+                if($last >= 0)
+                  // ... append to the last stored value
+                  $object[$attr][$last] .= $value;
+              // Otherwise, if attribute holds a single value ...
+              } else
+                // ... simply append to it
+                $object[$attr] .= $value;
+            }
+
+          }
+
+        }
+
       }
-      // Append retrieved line to the response
-      $response .= $line;
+
     }
 
-    // This newline is extremely important
-    // in order to separate raw RPSL objects
-    $response .= "\n";
-
-    // If bulk mode is NOT enabled ...
-    if(empty($begin) || empty($end)) {
-      // ... close used connection
-      fclose($sock);
-      // ... force a new connection
-      $sock = false;
-    }
+    // Close connection
+    socket_close($sock);
+    $sock = false;
 
   }
 
   // At this point, all queries have been executed
-
-  // If bulk mode is enabled ...
-  if(!empty($begin) && !empty($end))
-    // ... end persistent connection
-    fwrite($sock, $end."\n");
-
-  // Close the connection
-  if($sock !== FALSE)
-    fclose($sock);
-
-  // Return cumulative response
-  return $response;
-}
-
-// **************************** QUERY FUNCTIONS *******************************
-
-function whois_query_server($server, $search, $type=NULL, $attr=NULL)
-{
-  // If search string(s) are missing ...
-  if(empty($search))
-    // ... return an empty result
-    return;
-
-  // If Whois server parameters are missing,
-  // explicitly return FALSE, to signal
-  // that something went wrong
-  if(empty($server) || !is_array($server))
-    return false;
-
-  //
-  // Leave out contact information
-  // to avoid RIPE's daily limit ban:
-  //
-  //   http://www.ripe.net/data-tools/db/faq/faq-db/why-did-you-receive-the-error-201-access-denied
-  //
-  $options = '-r';
-  // Preferred whois source
-  if(!empty($server['source'])) {
-    $sources = array();
-    // Break down this comma-separated list, in case
-    // it contains whitespaces (usually around commas)
-    foreach(explode(',', $server['source']) as $source)
-      $sources[] = strtolower(trim($source));
-    // Rebuild comma-separated list, without whitespaces
-    $options .= ' -s'.implode(',', $sources);
-  }
-  // Preferred object type
-  if(!empty($type))
-    $options .= ' -T'.$type;
-  // Inverse lookup by this attribute
-  if(!empty($attr))
-    $options .= ' -i'.$attr;
-
-  // Query whois server
-  $response = whois_execute($server, $search, $options);
-  // If something went wrong or we got nothing ...
-  if(empty($response))
-    // ... abort and propagate the result
-    return $response;
-
-  // Parsed objects go here
-  $objects = array();
-
-  // Split whois response into individual lines
-  // and then parse them into RPSL objects
-  foreach(explode("\n", $response) as $line) {
-
-    // Object ends on an empty line
-    if(empty($line)) {
-      // If object and it's primary key are defined ...
-      if(!empty($key) && !empty($object)) {
-        // If object already exists in the list ...
-        if(isset($objects[$key])) {
-          // ... and is already an array ...
-          if(is_sequential_array($objects[$key]))
-            // ... add it along with other objects
-            // with the same primary/lookup key
-            $objects[$key][] = $object;
-          // Otherwise, convert list entry to array ...
-          else
-            // ... containing both existing and the new object
-            $objects[$key] = array($objects[$key], $object);
-        // If object isn't in the list ...
-        } else
-          // ... just add it
-          $objects[$key] = $object;
-      }
-      // Reset per-object variables
-      unset($object, $key, $attr, $value, $skip);
-      continue;
-    }
-
-    // Some part of this processing loop determined
-    // that current object should be skipped ...
-    if(isset($skip) && $skip == TRUE)
-      continue;
-
-    // Skip comments
-    if(preg_match('/^\s*%/', $line))
-      continue;
-
-    // Looking for "attribute: value" line
-    if(preg_match('/^([^\s:]+):\s*(.*?)\s*$/i', $line, $m)) {
-      switch($m[1]) {
-        // Pick used attributes
-        case 'aut-num':
-        case 'import':
-        case 'export':
-        case 'mp-import':
-        case 'mp-export':
-        case 'as-set':
-        case 'route-set':
-        case 'route6-set':
-        case 'members':
-        case 'route':
-        case 'route6':
-        case 'origin':
-          $attr = $m[1];
-          $value = $m[2];
-          break;
-        // Skip unused attributes
-        default:
-          unset($attr);
-          continue 2;
-      }
-
-      // If no object is currently in construction ...
-      if(empty($object)) {
-        // If specific attribute was requested,
-        // but doesn't match the object type ...
-        if(!empty($type) && $type != $attr) {
-          // ... skip it
-          $skip = true;
-          continue;
-        }
-        // If all went well, start a new object
-        // and remember object's primary key
-        $object = array();
-        $key = $value;
-      }
-
-      // Store RPSL object
-      if(is_array($object)) {
-        // If attribute already exists ...
-        if(isset($object[$attr])) {
-          // ... and is already an array ...
-          if(is_array($object[$attr]))
-            // ... add value along with others
-            $object[$attr][] = $value;
-          // Otherwise, convert it to array ...
-          else
-            // ... which will hold previous and current value
-            $object[$attr] = array($object[$attr], $value);
-        // If attribute doesn't exist, create it
-        } else
-          $object[$attr] = $value;
-      }
-
-    // Line is a continuation of previous line(s) ?
-    } elseif(!empty($attr) && preg_match('/^\s*(.+)/i', $line, $m)) {
-
-      // Match should be a part of multiline value
-      $value = $m[1];
-      // Store RPSL object
-      if(!empty($object) && is_array($object)) {
-        // If attribute is an array ...
-        if(is_array($object[$attr])) {
-          $last = count($object[$attr]) - 1;
-          // ... append to the last stored value
-          $object[$attr][$last] .= $value;
-        // Otherwise, if attribute holds a single value ...
-        } else
-          // ... simply append to it
-          $object[$attr] .= $value;
-      }
-
-    }
-
-  }
-
   return $objects;
 }
 
-function whois_query($search, $type=NULL, $attr=NULL, &$servers=NULL)
+function whois_query($search_objects, $object_type=NULL, $inverse_lookup_attr=NULL, &$servers=NULL)
 {
   global $config;
 
@@ -534,10 +831,14 @@ function whois_query($search, $type=NULL, $attr=NULL, &$servers=NULL)
   // in order to avoid querying them again
   for($i = 0; $i <= sizeof($servers); $i++) {
     // Attempt to query the preferred server
-    $response = whois_query_server($servers[0], $search, $type, $attr);
+    $objects = whois_query_server($servers[0],
+                                  $search_objects,
+                                  $object_type,
+                                  $inverse_lookup_attr);
     // If query failed ...
-    if($response === false) {
-      if(isset($servers[0]['server']) && !empty($servers[0]['server']))
+    if($objects === false) {
+      if(isset($servers[0]['server']) &&
+         !empty($servers[0]['server']))
         debug_message("Removing failed server ".$servers[0]['server']." from the list.");
       else
         debug_message("Removing invalid server from the list. Check your configuration ?");
@@ -547,7 +848,7 @@ function whois_query($search, $type=NULL, $attr=NULL, &$servers=NULL)
       continue;
     }
     // Otherwise, we are done
-    return $response;
+    return $objects;
   }
 
   // If we reached this point,
@@ -555,7 +856,7 @@ function whois_query($search, $type=NULL, $attr=NULL, &$servers=NULL)
   return false;
 }
 
-// ************************** RPSL OBJECT FUNCTIONS ***************************
+// ******************** HIGH LEVEL RPSL OBJECT FUNCTIONS **********************
 
 function aut_num($asn, &$servers=NULL)
 {
@@ -578,149 +879,8 @@ function aut_num($asn, &$servers=NULL)
      !is_array($res[$asn]))
     return;
 
-  // If we retrieved a single RPSL object,
-  // place it into array to make sure we always
-  // iterate over array. If it's not an RPSL
-  // object, it's already an array of objects
-  $objects = is_rpsl_object($res[$asn]) ?
-                array($res[$asn]):$res[$asn];
-
-  // Since multiple sources can be specified,
-  // more than one version of the same aut-num
-  // can be retrieved in the same order sources
-  // were specified.
-  foreach($objects as $object) {
-
-    // Begin constructing new aut-num object
-    $aut_num = array();
-
-/*
-    // Copy import attribute(s)
-    if(isset($object['import'])) {
-      $imports = is_array($object['import']) ?
-                    $object['import']:
-                    array($object['import']);
-      foreach($imports as $import) {
-        // Extract ASN we are importing from
-        if(preg_match('/from\s+([^\s:;#]+)/i', $import, $m))
-          $from = strtoupper($m[1]);
-        // Extract filter that defines what will be imported
-        if(preg_match('/accept\s+(?:\{\s*([^\{\}]+?)\s*\}|([^\s:;#]+))/i', $import, $m)) {
-          // Inline filter ?
-          if(!empty($m[1]))
-            // Split inline filter specification
-            // into an array of prefixes
-            $what = preg_split('/(?:\^\S*)?[^A-F\d\.:\/]+/i', $m[1]);
-          // AS, AS-SET, AS-ANY or ANY ?
-          elseif(!empty($m[2]))
-            // Make sure this is always uppercase
-            $what = strtoupper($m[2]);
-        }
-        // Store dumbed down version of import attribute
-        if(!empty($what))
-          $aut_num['import'][$from] = $what;
-      }
-    }
-*/
-    // Copy export attribute(s)
-    if(isset($object['export'])) {
-      $exports = is_array($object['export']) ?
-                    $object['export']:
-                    array($object['export']);
-      foreach($exports as $export) {
-        // Extract ASN we are exporting to
-        if(preg_match('/to\s+([^\s:;#]+)/i', $export, $m))
-          $to = strtoupper($m[1]);
-        // Extract filter that defines what will be exported
-        if(preg_match('/announce\s+(?:\{\s*([^\{\}]+?)\s*\}|([^\s:;#]+))/i', $export, $m)) {
-          // Inline filter ?
-          if(!empty($m[1]))
-            // Split inline filter specification
-            // into an array of prefixes
-            $what = preg_split('/(?:\^\S*)?[^A-F\d\.:\/]+/i', $m[1]);
-          // AS, AS-SET, AS-ANY or ANY ?
-          elseif(!empty($m[2]))
-            // Make sure this is always uppercase
-            $what = strtoupper($m[2]);
-        }
-        // Store dumbed down version of export attribute
-        if(!empty($what))
-          $aut_num['export'][$to] = $what;
-      }
-    }
-/*
-    // Copy mp-import attribute(s)
-    if(isset($object['mp-import'])) {
-      $imports = is_array($object['mp-import']) ?
-                    $object['mp-import']:
-                    array($object['mp-import']);
-      foreach($imports as $import) {
-        // Extract ASN we are importing from
-        if(preg_match('/from\s+([^\s:;#]+)/i', $import, $m))
-          $from = strtoupper($m[1]);
-        // Extract filter that defines what will be imported
-        if(preg_match('/accept\s+(?:\{\s*([^\{\}]+?)\s*\}|([^\s:;#]+))/i', $import, $m)) {
-          // Inline filter ?
-          if(!empty($m[1]))
-            // Split inline filter specification
-            // into an array of prefixes
-            $what = preg_split('/(?:\^\S*)?[^A-F\d\.:\/]+/i', $m[1]);
-          // AS, AS-SET, AS-ANY or ANY ?
-          elseif(!empty($m[2]))
-            // Make sure this is always uppercase
-            $what = strtoupper($m[2]);
-        }
-        // Store dumbed down version of import attribute
-        if(!empty($what))
-          $aut_num['mp-import'][$from] = $what;
-      }
-    }
-*/
-    // Copy mp-export attribute(s)
-    if(isset($object['mp-export'])) {
-      $exports = is_array($object['mp-export']) ?
-                    $object['mp-export']:
-                    array($object['mp-export']);
-      foreach($exports as $export) {
-        // Extract ASN we are exporting to
-        if(preg_match('/to\s+([^\s:;#]+)/i', $export, $m))
-          $to = strtoupper($m[1]);
-        // Extract filter that defines what will be exported
-        if(preg_match('/announce\s+(?:\{\s*([^\{\}]+?)\s*\}|([^\s:;#]+))/i', $export, $m)) {
-          // Inline filter ?
-          if(!empty($m[1]))
-            // Split inline filter specification
-            // into an array of prefixes
-            $what = preg_split('/(?:\^\S*)?[^A-F\d\.:\/]+/i', $m[1]);
-          // AS, AS-SET, AS-ANY or ANY ?
-          elseif(!empty($m[2]))
-            // Make sure this is always uppercase
-            $what = strtoupper($m[2]);
-        }
-        // Store dumbed down version of export attribute
-        if(!empty($what))
-          $aut_num['mp-export'][$to] = $what;
-      }
-    }
-
-    // Sources are specified in descending order
-    // of significance, thus we will pick the first
-    // version of this aut-num that defines the info
-    // we require (export attributes)
-    if(!empty($aut_num) && 
-       (isset($aut_num['export']) ||
-        isset($aut_num['mp-export']))) {
-      // ... add the rest of attributes of interest
-      $aut_num['aut-num'] = $asn;
-      // ... and it's done
-      return $aut_num;
-    }
-  }
-
-  // If we got to this point, none of the found versions
-  // of this aut-num object had enough information to be
-  // of any use to us
-  return;
+  return is_rpsl_object($res[$asn]) ?
+                $res[$asn]:$res[$asn][0];
 }
 
 function as_set($as_set_name, &$servers=NULL)
@@ -762,31 +922,15 @@ function as_set($as_set_name, &$servers=NULL)
       if(empty($object) || !is_array($object))
         continue;
 
-      // If we retrieved a single RPSL object,
-      // place it into array to make sure we always
-      // iterate over array. If it's not an RPSL
-      // object, it's already an array of objects
-      $objects = is_rpsl_object($object) ?
-                          array($object):$object;
-
-      // Proper AS set object must have members attribute(s)
-      $as_set = NULL;
       // Each entry in the array of as-sets represents
       // a single as-set. However, if searching multiple
       // sources, each entry can be an array of different
-      // versions of the same as-set from different sources,
-      // returned in the order sources were specified
-      foreach($objects as $object) {
-        // Sources are specified in descending order
-        // of significance, thus we will pick the first
-        // version of this as-set that has all the info
-        // we require (members attribute)
-        if(is_array($object) && isset($object['members'])) {
-          $as_set = $object;
-          break;
-        }
-      }
-
+      // versions of the same as-set provided by different
+      // sources in the same order sources were searched.
+      // Sources are searched in descending order of
+      // significance, thus we will simply pick the first
+      // (most significant) version of this as-set.
+      $as_set = is_rpsl_object($object) ? $object:$object[0];
       if(empty($as_set))
         continue;
 
@@ -796,27 +940,17 @@ function as_set($as_set_name, &$servers=NULL)
 
       // Recursively copy and expand member attributes
       foreach($members as $member) {
-        // Skip parsing errors
-        if(empty($member))
-          continue;
-        // String might contain comma-separated members list
-        foreach(preg_split('/[,;:]/', strtoupper($member)) as $member) {
-          // Strip leading and trailing trash
-          if(!preg_match('/([^\s#]+)/', $member, $m))
-            continue;
-          $member = $m[1];
-          // If member is a simple AS, AS-ANY or ANY ...
-          if(is_asn($member) || is_any($member)) {
-            // ... just store it along with the rest
-            $as_set_members[$member] = true;
-          // Otherwise, member should be an AS set.
-          // So, unless already expanded ...
-          } elseif(!isset($already_expanded[$member])) {
-            // ... add it to the expansion list
-            $expand_as_sets[$member] = true;
-            // ... set it as expanded to prevent loops
-            $already_expanded[$member] = true;
-          }
+        // If member is a simple AS, AS-ANY or ANY ...
+        if(is_asn($member) || is_any($member)) {
+          // ... just store it along with the rest
+          $as_set_members[$member] = true;
+        // Otherwise, member should be an AS set.
+        // So, unless already expanded ...
+        } elseif(!isset($already_expanded[$member])) {
+          // ... add it to the expansion list
+          $expand_as_sets[$member] = true;
+          // ... set it as expanded to prevent loops
+          $already_expanded[$member] = true;
         }
       }
     }
@@ -871,66 +1005,39 @@ function route_set($route_set_name, &$servers=NULL)
       if(empty($object) || !is_array($object))
         continue;
 
-      // If we retrieved a single RPSL object,
-      // place it into array to make sure we always
-      // iterate over array. If it's not an RPSL
-      // object, it's already an array of objects
-      $objects = is_rpsl_object($object) ?
-                          array($object):$object;
-
-      // Proper route set object must have members attribute(s)
-      $route_set = NULL;
       // Each entry in the array of route-sets represents
       // a single route-set. However, if searching multiple
       // sources, each entry can be an array of different
-      // versions of the same route-set from different sources,
-      // returned in the order sources were specified
-      foreach($objects as $object) {
-        // Sources are specified in descending order
-        // of significance, thus we will pick the first
-        // version of this route-set that has all the info
-        // we require (members attribute)
-        if(is_array($object) && isset($object['members'])) {
-          $route_set = $object;
-          break;
-        }
-      }
-
+      // versions of the same route-set provided by different
+      // sources in the same order sources were searched.
+      // Sources are searched in descending order of
+      // significance, thus we will simply pick the first
+      // (most significant) version of this route-set.
+      $route_set = is_rpsl_object($object) ? $object:$object[0];
       if(empty($route_set))
         continue;
 
       // The list of unique members of current route set
       $members = is_array($route_set['members']) ?
-                       array_unique($route_set['members']):
-                       array($route_set['members']);
+                   $route_set['members']:array($route_set['members']);
 
       // Recursively copy and expand member attributes
       foreach($members as $member) {
-        // Skip parsing errors
-        if(empty($member))
-          continue;
-        // String might contain comma-separated members list
-        foreach(preg_split('/(?:\^[^,\s]*)?\s*[,\s]\s*/', strtoupper($member)) as $member) {
-          // Strip leading and trailing trash
-          if(!preg_match('/([^\s#]+)/', $member, $m))
-            continue;
-          $member = $m[1];
-          // If member is an IPv4 prefix ...
-          if(is_ipv4($member)) {
-            // ... just store it along with the rest
-            $route_set_members[$member] = true;
-          // If member is RS-ANY or ANY ...
-          } elseif(is_any($member)) {
-            // ... store 0.0.0.0/0
-            $route_set_members['0.0.0.0/0'] = true;
-          // Otherwise, member should be a route set.
-          // So, unless already expanded ...
-          } elseif(!isset($already_expanded[$member])) {
-            // ... add it to the expansion list
-            $expand_route_sets[$member] = true;
-            // ... set it as expanded to prevent loops
-            $already_expanded[$member] = true;
-          }
+        // If member is an IPv4 prefix ...
+        if(is_ipv4($member)) {
+          // ... just store it along with the rest
+          $route_set_members[$member] = true;
+        // If member is RS-ANY or ANY ...
+        } elseif(is_any($member)) {
+          // ... store 0.0.0.0/0
+          $route_set_members['0.0.0.0/0'] = true;
+        // Otherwise, member should be a route set.
+        // So, unless already expanded ...
+        } elseif(!isset($already_expanded[$member])) {
+          // ... add it to the expansion list
+          $expand_route_sets[$member] = true;
+          // ... set it as expanded to prevent loops
+          $already_expanded[$member] = true;
         }
       }
     }
@@ -985,66 +1092,39 @@ function route6_set($route6_set_name, &$servers=NULL)
       if(empty($object) || !is_array($object))
         continue;
 
-      // If we retrieved a single RPSL object,
-      // place it into array to make sure we always
-      // iterate over array. If it's not an RPSL
-      // object, it's already an array of objects
-      $objects = is_rpsl_object($object) ?
-                          array($object):$object;
-
-      // Proper route6 set object must have members attribute(s)
-      $route6_set = NULL;
-      // Each entry in the array of route6-sets represents
-      // a single route6-set. However, if searching multiple
+      // Each entry in the array of route-sets represents
+      // a single route-set. However, if searching multiple
       // sources, each entry can be an array of different
-      // versions of the same route6-set from different sources,
-      // returned in the order sources were specified
-      foreach($objects as $object) {
-        // Sources are specified in descending order
-        // of significance, thus we will pick the first
-        // version of this route6-set that has all the info
-        // we require (members attribute)
-        if(is_array($object) && isset($object['members'])) {
-          $route6_set = $object;
-          break;
-        }
-      }
-
+      // versions of the same route-set provided by different
+      // sources in the same order sources were searched.
+      // Sources are searched in descending order of
+      // significance, thus we will simply pick the first
+      // (most significant) version of this route-set.
+      $route6_set = is_rpsl_object($object) ? $object:$object[0];
       if(empty($route6_set))
         continue;
 
       // The list of unique members of current route set
       $members = is_array($route6_set['members']) ?
-                       array_unique($route6_set['members']):
-                       array($route6_set['members']);
+                   $route6_set['members']:array($route6_set['members']);
 
       // Recursively copy and expand member attributes
       foreach($members as $member) {
-        // Skip parsing errors
-        if(empty($member))
-          continue;
-        // String might contain comma-separated members list
-        foreach(preg_split('/(?:\^[^,\s]*)?\s*[,\s]\s*/', strtoupper($member)) as $member) {
-          // Strip leading and trailing trash
-          if(!preg_match('/([^\s#]+)/', $member, $m))
-            continue;
-          $member = $m[1];
-          // If member is an IPv6 prefix ...
-          if(is_ipv6($member)) {
-            // ... just store it along with the rest
-            $route6_set_members[$member] = true;
-          // If member is RS-ANY or ANY ...
-          } elseif(is_any($member)) {
-            // ... store ::/0
-            $route_set_members['::/0'] = true;
-          // Otherwise, member should be a route set.
-          // So, unless already expanded ...
-          } elseif(!isset($already_expanded[$member])) {
-            // ... add it to the expansion list
-            $expand_route6_sets[$member] = true;
-            // ... set it as expanded to prevent loops
-            $already_expanded[$member] = true;
-          }
+        // If member is an IPv6 prefix ...
+        if(is_ipv6($member)) {
+          // ... just store it along with the rest
+          $route6_set_members[$member] = true;
+        // If member is RS-ANY or ANY ...
+        } elseif(is_any($member)) {
+          // ... store ::/0
+          $route_set_members['::/0'] = true;
+        // Otherwise, member should be a route set.
+        // So, unless already expanded ...
+        } elseif(!isset($already_expanded[$member])) {
+          // ... add it to the expansion list
+          $expand_route6_sets[$member] = true;
+          // ... set it as expanded to prevent loops
+          $already_expanded[$member] = true;
         }
       }
     }
@@ -1227,11 +1307,8 @@ function get_announced_ipv4_prefixes($from_asn, $to_asn, &$servers=NULL)
       $objects = array($objects);
     // Process route objects
     foreach($objects as $route) {
-      // Route object must have the origin attribute
-      if(empty($route['origin']))
-        continue;
-      // Make sure origin AS is uppercase
-      $asn = strtoupper($route['origin']);
+      // Get route's origin
+      $asn = $route['origin'];
       // Skip prefix if originated by target ASN.
       // No point exporting it to itself.
       if($asn == $to_asn)
@@ -1315,11 +1392,8 @@ function get_announced_ipv6_prefixes($from_asn, $to_asn, &$servers=NULL)
       $objects = array($objects);
     // Process route6 objects
     foreach($objects as $route6) {
-      // Route6 object must have the origin attribute
-      if(empty($route6['origin']))
-        continue;
-      // Make sure origin AS is uppercase
-      $asn = strtoupper($route6['origin']);
+      // Get route's origin
+      $asn = $route6['origin'];
       // Skip prefix if originated by target ASN.
       // No point exporting it to itself.
       if($asn == $to_asn)
