@@ -1,6 +1,6 @@
 <?xml version="1.0" standalone="yes"?> 
 <policies>
-    <policy id="ACCEPT-FROM-HE" peer-as="6939" family="inet">
+    <policy id="ACCEPT-FROM-HE" peer-as="6939" family="inet" validate-paths="no">
 	<whois>
 	    <server port="43" type="irrd" family="inet" sock-timeout="5" query-timeout="1800" query-size="1000">whois.radb.net</server>
 	</whois>

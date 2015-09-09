@@ -276,23 +276,57 @@ function update_template($autotemplate, &$statusmsg="")
 
     status_message("Autopolicy template ".$policy_id." is using ".(empty($whois_servers) ? "global":"per-policy")." whois servers.", $statusmsg);
 
+    // This optional attribute, if set to "yes",
+    // forces whois code to consider valid only
+    // those prefixes that have at least one valid
+    // path between local AS and prefix's origin.
+    //
+    // Valid path is an unbroken chain of aut-num
+    // objects between local AS and origin AS,
+    // linked using import/export attributes.
+    //
+    // Chain remains unbroken if every AS along
+    // the path is importing at least a portion of
+    // whatever it's upstream AS is exporting.
+    switch($policy->getAttribute('validate-paths')) {
+      case 'true':
+      case 'yes':
+      case 'on':
+      case '1':
+        $validate_as_paths = true;
+        break;
+      default:
+        $validate_as_paths = false;
+        break;
+    }
+
+    // If autopolicy terms below contain auto-as-path tags,
+    // we must search for as-path information as well
+    $include_as_paths = $policy->getElementsByTagName('auto-as-path')->length > 0;
+
     // To which protocol family should prefixes belong ?
     $family = $policy->getAttribute('family');
     switch($family) {
       case 'inet':
-        status_message("Fetching af inet prefixes announced by AS".$peer_as." to AS".$local_as." ...", $statusmsg);
-        // Get prefixes announced by <peer-as> to <local-as>
-        $announced = get_announced_ipv4_prefixes('AS'.$peer_as, 'AS'.$local_as, $whois_servers);
+        $address_family = AF_INET;
         break;
       case 'inet6':
-        status_message("Fetching af inet6 prefixes announced by AS".$peer_as." to AS".$local_as." ...", $statusmsg);
-        // Get prefixes announced by <peer-as> to <local-as>
-        $announced = get_announced_ipv6_prefixes('AS'.$peer_as, 'AS'.$local_as, $whois_servers);
+        $address_family = AF_INET6;
         break;
       default:
         // Next policy
         continue 2;
     }
+
+    status_message("Fetching af ".$family." prefixes announced by AS".$peer_as." to AS".$local_as." ...", $statusmsg);
+
+    // Get prefixes and/or AS paths announced by <peer-as> to <local-as>
+    $announced = get_announced_prefixes('AS'.$peer_as,
+                                        'AS'.$local_as,
+                                        $address_family,
+                                        $include_as_paths,
+                                        $validate_as_paths,
+                                        $whois_servers);
 
     // No point going any further
     // if prefixes are missing
@@ -301,7 +335,15 @@ function update_template($autotemplate, &$statusmsg="")
       return;
     }
 
-    status_message("AS".$peer_as." is announcing (af ".$family.") ".count(array_keys($announced))." autonomous systems, ".array_sum(array_map("count", $announced))." prefixes.", $statusmsg);
+    $status_message = "AS".$peer_as." is announcing (af ".$family.") ".count(array_keys($announced['prefixes']))." autonomous systems";
+
+    if(isset($announced['prefixes']))
+      $status_message .= ", ".array_sum(array_map('count', $announced['prefixes']))." prefixes";
+
+    if(isset($announced['as_paths']))
+      $status_message .= ", ".array_sum(array_map('count', $announced['as_paths']))." AS paths";
+
+    status_message($status_message.".", $statusmsg);
 
     // This array will receive terms
     // built as strings in XML format
@@ -467,10 +509,21 @@ function update_template($autotemplate, &$statusmsg="")
           $name_prepend = is_name($p->nodeValue) ? ($p->nodeValue).'-':'';
 
           // Sort prefixes by ASn
-          ksort($announced);
+          ksort($announced['prefixes']);
 
-          // Loop through all collected prefixes
-          foreach($announced as $origin_as => $prefixes) {
+          // Loop through all collected routing data
+          foreach($announced['prefixes'] as $origin_as => $prefixes) {
+
+            // Without prefixes we have nothing to do
+//            if(!isset($as_data['prefixes']))
+//              continue;
+
+            // Prefixes originated by this AS
+//            $prefixes = $as_data['prefixes'];
+
+            // AS paths from local AS to this AS
+            if(isset($announced['as_paths'][$origin_as]))
+              $as_paths = $announced['as_paths'][$origin_as];
 
             // Extract AS number from ASN
             if(!preg_match('/^(?:AS)?(\d+)$/i', $origin_as, $m))
@@ -774,7 +827,7 @@ function update_template_by_id($id, &$log='')
     status_message("Autopolicy ".$id." successfully updated.", $log);
   }
 
-  status_message("Done.", $log);
+//  status_message("Done.", $log);
 
   return true;
 }
@@ -809,7 +862,7 @@ function update_all_templates(&$log='')
     $template->save($config['templates_dir'].'/policy/'.$filename);
   }
 
-  status_message("Done.", $log);
+//  status_message("Done.", $log);
 
   return true;
 }
@@ -836,13 +889,16 @@ function update_templates($id=NULL)
             update_template_by_id($ids, $log);
 
   // If update was successful ..
-  if($res)
+  if($res) {
     // ... commit changes in the repository
     vcs_commit($config['templates_dir'], $log);
+    status_message("Done.", $log);
   // Otherwise ...
-  else
+  } else {
     // ... reset to last good commit
     vcs_reset();
+    status_message("Failed.", $log);
+  }
 
   return $res;
 }

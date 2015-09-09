@@ -18,12 +18,14 @@
 
 */
 
+// Address families
 if(!defined('AF_INET'))
   define('AF_INET',       2);
 
 if(!defined('AF_INET6'))
   define('AF_INET6',      10);
 
+// Errno
 define('EAGAIN',          11);    // Try again
 define('EWOULDBLOCK',     11);    // Operation would block
 define('ENOTSOCK',        88);    // Socket operation on non-socket
@@ -56,5 +58,24 @@ define('EALREADY',        114);   // Operation already in progress
 define('EINPROGRESS',     115);   // Operation now in progress
 define('EREMOTEIO',       121);   // Remote I/O error
 define('ECANCELED',       125);   // Operation Canceled
+
+// RPSL object types
+// (by object name)
+define('RPSL_AS',         0x00000001);     // AS number
+define('RPSL_PREFIX',     0x00000002);     // IPv4/IPv6 prefix
+define('RPSL_OBJECTS',    0x80000000);     // Return full objects instead of primary keys
+
+// Debug message categories
+define('info',            0x00000001);
+define('transport',       0x00000002);
+define('parser',          0x00000004);
+define('cache',           0x00000008);
+define('preprocessor',    0x00000010);
+define('rpsl',            0x00000020);
+define('expression',      0x00000040);
+define('as-path',         0x00000080);
+define('php',             0x80000000);
+define('all',             0xffffffff);
+define('full',            0xffffffff);
 
 ?>

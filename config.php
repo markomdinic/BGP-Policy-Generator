@@ -52,9 +52,6 @@ $config['timezone']       = "UTC";
 $config['git']            = "/usr/bin/git";
 
 // Debug messages
-//  false  - disabled
-//  true   - enabled
-//  'full' - enabled + PHP warnings and errors
 $config['debug']          = false;
 
 ?>

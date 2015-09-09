@@ -347,13 +347,41 @@ Auto-policy template
 It is basically the same as policy template and most of it is copied as is when
 generating policy templates from it. However, there are a few differences:
 
-Tag <policy> uses 2 mandatory attributes:
+Tag <policy> uses two additional mandatory attributes:
 
  'peer-as' - ASN of the BGP neighbor this policy is applied to. It is used to fetch
              prefixes specified AS announces to AS defined as 'local_as' in config.php.
 
  'family'  - Used to determine the address family of generated prefix lists. It can
              either be 'inet' for IPv4 prefixes, or 'inet6' for IPv6.
+
+There is also one optional attribute:
+
+ 'validate-paths' - If set to "yes", as-path tree will be built, rooted at local AS
+                    and branching through peer AS towards routes' origins.
+
+                    Origins of routes announced by peer AS will be checked against
+                    this tree and routes without a (registered) path between their
+                    origin and the local AS will be discarded. Path exists when
+                    there is a chain of aut-num objects linked together by their
+                    import/export attributes, starting from local AS and going all
+                    the way upstream, to routes' origin AS. To maintain links between
+                    aut-num objects in the chain, each aut-num object has to import
+                    at least a fraction of what it's upstream peer is exporting.
+                    Then and only then will a path be considered valid.
+
+                    In short, this attribute, if set, will force additional check
+                    to ensure that only routes that can be traced back to their
+                    origin are used. This will most likely reduce the size of
+                    generated policy, but will make the process of auto-policy
+                    generation very prone to errors due to wrong/stale/incomplete
+                    peering information found in routing registries. In a perfect
+                    world, every AS would keep it's aut-num object up-to-date at
+                    all times, containing the most current and accurate peering
+                    information. Unfortunately, that is rarely true. Therefore,
+                    use this attribute with caution.
+
+                    Default is "no".
 
 Tag <auto-prefix-list> within <match> takes the same attributes as <prefix-list>
 with a few differences - additional attributes 'origin', 'aggregate', 'upto' and

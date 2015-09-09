@@ -62,14 +62,57 @@ function status_message($msg, &$log=NULL)
     $log .= $msg."\n";
 }
 
-function debug_message($msg, &$log=NULL)
+function debug_message()
 {
   global $config;
 
-  if(isset($config['debug']) && $config['debug'])
-    status_message($msg, $log);
-}
+  if(!isset($config['debug']) ||
+      empty($config['debug']))
+    return;
 
+  $args = func_get_args();
+  if(empty($args))
+    return;
+
+  $category = array_shift($args);
+  if(empty($category))
+    return;
+
+  $debug = is_array($config['debug']) ?
+             $config['debug']:
+             array(($config['debug'] === true) ?
+                            'info':$config['debug']);
+
+  // Bitmask of requested debug categories
+  $debug_mask = array_sum(array_map('constant', $debug));
+  // Bitmask that represents this message's category
+  $category_mask = constant($category);
+  if(!isset($category_mask)) {
+    $category = 'info';
+    $category_mask = 1;
+  }
+
+  if($category_mask & $debug_mask) {
+
+    $message = "";
+
+    foreach($args as $part) {
+
+      if(is_string($part))
+        $message .= $part;
+      elseif(is_sequential_array($part))
+        $message .= preg_match('/[\[\(\{\'\"]\s*$/', $message) ?
+                       implode(' ', $part):
+                       '"'.implode('", "', $part).'"';
+      elseif(is_associative_array($part))
+        $message .= print_r($part, true);
+
+      $message .= " ";
+    }
+
+    echo("[".$category."] ".trim($message)."\n");
+  }
+}
 
 function is_sequential_array(&$array)
 {
@@ -148,6 +191,38 @@ function is_any($value)
     return false;
 
   return preg_match('/^(?:[AR]S\-)?ANY$/i', $value) ? true:false;
+}
+
+function is_as_set($value)
+{
+  if(empty($value) || !is_string($value))
+    return false;
+
+  return preg_match('/^(?:AS\d+:)?AS\-(?!ANY)/i', $value) ? true:false;
+}
+
+function is_route_set($value)
+{
+  if(empty($value) || !is_string($value))
+    return false;
+
+  return preg_match('/^RS\-/i', $value) ? true:false;
+}
+
+function is_filter_set($value)
+{
+  if(empty($value) || !is_string($value))
+    return false;
+
+  return preg_match('/^FLTR\-/i', $value) ? true:false;
+}
+
+function is_rpsl_set($value)
+{
+  if(empty($value) || !is_string($value))
+    return false;
+
+  return preg_match('/^(?:(?:AS\d+:)?AS|RS)\-(?!ANY)/i', $value) ? true:false;
 }
 
 function is_ipv4($prefixes)

@@ -52,7 +52,7 @@ include $config['includes_dir']."/functions.inc.php";
 
 // Unless debug is set to full ...
 if(!isset($config['debug']) ||
-   $config['debug'] !== 'full')
+   !($config['debug'] & 'php'))
   // ... suppress PHP messages
   error_reporting(~E_ALL);
 
