@@ -963,7 +963,7 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
       while($receive) {
 
         // Get a part of response
-        $received = @socket_recv($sock, $buffer, 1000000, 0);
+        $received = @socket_recv($sock, $buffer, 1000000, MSG_DONTWAIT);
 
         // Read failed ?
         if($received === FALSE) {
