@@ -787,7 +787,7 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
   // List of objects not found by the search
   // starts from the full search list and
   // gets trimmed down with each found object
-  $missing = array_fill_keys($search_list, array());
+  $missing = array_flip($search_list);
 
   // Required by socket_select()
   $none = NULL;
@@ -963,7 +963,7 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
       while($receive) {
 
         // Get a part of response
-        $received = @socket_recv($sock, $buffer, 1000000, MSG_DONTWAIT);
+        $received = @socket_recv($sock, $buffer, 1000000, MSG_WAITALL);
 
         // Read failed ?
         if($received === FALSE) {
@@ -1246,7 +1246,7 @@ function whois_query($search_list, $object_type=NULL, $inverse_lookup_attr=NULL,
   if(!isset($inverse_lookup_attr)) {
 
     // Search objects in cache by primary key
-    $cache_hits = array_intersect_key($cache['direct'], array_fill_keys($search_list, ''));
+    $cache_hits = array_intersect_key($cache['direct'], array_flip($search_list));
 
     if(count($cache_hits) > 0) {
       debug_message('cache', "Direct query cache hits: [", array_keys($cache_hits), "]");
@@ -1257,7 +1257,7 @@ function whois_query($search_list, $object_type=NULL, $inverse_lookup_attr=NULL,
   } elseif(isset($cache['inverse'][$inverse_lookup_attr])) {
 
     // Search objects in cache inversely, by given attribute
-    $cache_hits = array_intersect_key($cache['inverse'][$inverse_lookup_attr], array_fill_keys($search_list, ''));
+    $cache_hits = array_intersect_key($cache['inverse'][$inverse_lookup_attr], array_flip($search_list));
 
     if(count($cache_hits) > 0) {
       debug_message('cache', "Inverse query cache hits: [", array_keys($cache_hits), "]");
