@@ -2,7 +2,7 @@
 <?php
 /*
 
- Copyright (c) 2015 Marko Dinic <marko@yu.net>. All rights reserved.
+ Copyright (c) 2017 Marko Dinic <marko@yu.net>. All rights reserved.
 
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 
 function usage()
 {
+  echo("\nBGP Policy Generator v".VERSION." (Oct 11 2017)\n\n");
   echo("Usage: ".basename(realpath(__FILE__))." [OPTIONS] <platform> <config_type> [template_id1[,template_id2,...]]\n\n");
   echo(" --help|-h                      This help message\n");
   echo(" --before|-b <date>             Generate first configuration before this date\n");
