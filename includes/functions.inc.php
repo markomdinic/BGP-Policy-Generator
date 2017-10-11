@@ -806,8 +806,6 @@ function update_template_by_id($id, &$log='')
   foreach($ids as $id) {
     status_message("Updating autopolicy template ".$id." ...", $log);
 
-    $start_time = microtime(true);
-
     // Load specific autopolicy template
     $autotemplate = load_template($config['templates_dir'].'/autopolicy/'.$id);
     if(!isset($autotemplate)) {
@@ -815,17 +813,21 @@ function update_template_by_id($id, &$log='')
       continue;
     }
 
+    // Update operations' start time
+    $start_time = microtime(true);
     // Generate config templates from autopolicy template
     $template = update_template($autotemplate, $log);
-
     // Calculate the duration of the update
     // (in seconds), rounded to 2 decimals
     $duration = round(microtime(true) - $start_time, 2);
 
+    // If template update failed ...
     if(!isset($template)) {
       status_message("Autopolicy ".$id." update failed after ".$duration." seconds.", $log);
+      // ... move on to the next template
       continue;
     }
+
     // Make XML output properly formatted
     $template->formatOutput = true;
     // Save updated template to the policy directory
@@ -855,16 +857,27 @@ function update_all_templates(&$log='')
 
   // Process all autopolicy template files
   foreach($autotemplates as $filename => $autotemplate) {
+    // Update operations' start time
+    $start_time = microtime(true);
     // Update template from autopolicy template
     $template = update_template($autotemplate, $log);
+    // Calculate the duration of the update
+    // (in seconds), rounded to 2 decimals
+    $duration = round(microtime(true) - $start_time, 2);
+
     // If template update failed ...
-    if(!isset($template))
+    if(!isset($template)) {
+      status_message("Autopolicy update failed after ".$duration." seconds.", $log);
       // ... move on to the next template
       continue;
+    }
+
     // Make XML output properly formatted
     $template->formatOutput = true;
     // Save updated template to the policy directory
     $template->save($config['templates_dir'].'/policy/'.$filename);
+
+    status_message("Autopolicy successfully updated after ".$duration." seconds.", $log);
   }
 
   return true;
