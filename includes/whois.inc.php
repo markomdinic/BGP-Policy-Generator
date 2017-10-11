@@ -1,7 +1,7 @@
 <?php
 /*
 
- Copyright (c) 2015 Marko Dinic <marko@yu.net>. All rights reserved.
+ Copyright (c) 2017 Marko Dinic <marko@yu.net>. All rights reserved.
 
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -583,15 +583,17 @@ function parse_route6($object)
   }
 
   return array(
-    'route' => strtolower($object['route']),
+    'route6' => strtolower($object['route6']),
     'origin' => strtoupper($object['origin'])
   );
 }
 
 // ************************ LOW LEVEL WHOIS FUNCTIONS *************************
 
-function whois_query_server($server, $search_list, $object_type=NULL, $inverse_lookup_attr=NULL, &$cache=NULL)
+function whois_query_server($server, $search_list, $object_type=NULL, $inverse_lookup_attr=NULL, &$cache_direct=NULL, &$cache_inverse=NULL)
 {
+  global $config;
+
   // If search list is empty ...
   if(empty($search_list))
     // ... return an empty result
@@ -666,11 +668,6 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
       return false;
   }
 
-  // Whois server TCP port
-  // (default: 43)
-  $port = is_port($server['port']) ?
-            $server['port']:43;
-
   // Address families for connection ('inet', 'inet6')
   // (default: 'inet6,inet')
   foreach(explode(',', (!empty($server['family'])) ? $server['family']:'inet6,inet') as $af) {
@@ -687,31 +684,35 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
     }
   }
 
-  // Socket operations (connect/read/write) timeout
-  // (default: 5 seconds)
-  $socket_timeout = is_positive($server['sock_timeout']) ?
-                      $server['sock_timeout']:5;
+  // Whois server TCP port
+  // (default: 43)
+  $port = is_port($server['port']) ?
+            $server['port']:43;
 
-  // Timeout parameter for socket_set_option SO_SNDTIMEO and SO_RCVTIMEO
-  $snd_rcv_timeout = array('sec' => $socket_timeout, 'usec' => 0);
-
-  // Whois query size (max number of objects per query in bulk mode)
-  // (default: 1000)
-  $query_size = is_positive($server['query_size']) ?
-                  $server['query_size']:1000;
+  // Use user-defined whois query size, if any
+  if(is_positive($server['query_size']))
+    $query_size = $server['query_size'];
 
   // Query timeout (max time a single query can last)
   // (default query timeout in bulk mode is 30 min)
   $query_timeout = 1800;
 
-  // Whois server type ('irrd', 'ripe')
-  // (default: none)
-  switch($server['type']) {
+  // Whois server type ('irrd', 'ripe', other)
+  // (default: other)
+  switch(isset($server['type']) ? $server['type']:'') {
     // Whois server is 100% RIPE compatibile
     case 'ripe':
       // Enable bulk mode
-      $begin = "-k\n";
-      $end = "-k\n";
+      $begin = "-k\r\n";
+      $end = "-k\r\n";
+      // RIPE whois server implements stop-and-wait protocol,
+      // which means we can ask for the next object only after
+      // we have received the previous one
+      $query_size = 1;
+      // We will NOT open a new connection on each query. Rather
+      // we will go through possibly many query-response cycles
+      // over a single persistent connection
+      $reconnect_on_query = false;
       debug_message('info', "Using RIPE-compatibile bulk query mode.");
       break;
     // Whois server is based on IRRd software.
@@ -722,6 +723,14 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
       // Enable bulk mode
       $begin = "!!\n";
       $end = "q\n";
+      // IRRd doesn't implement stop-and-wait like RIPE server does,
+      // so we can query multiple objects and then receive multiple
+      // responses. Default is conservative 100 objects per query,
+      // but can be overriden by config.
+      if(empty($query_size))
+        $query_size = 100;
+      // We will NOT open a new connection on each query
+      $reconnect_on_query = false;
       debug_message('info', "Using irrd-compatibile bulk query mode.");
       break;
     // Other/unknown/'traditional' whois server
@@ -731,6 +740,10 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
       $end = "";
       // Force a single object per query in normal mode
       $query_size = 1;
+      // We have to open a new connection on each query because
+      // server closes the connection once it has delivered
+      // the response
+      $reconnect_on_query = true;
       // Default query timeout in normal mode is 1 min
       $query_timeout = 60;
       debug_message('info', "Using normal query mode.");
@@ -740,6 +753,11 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
   // Use user-defined query timeout, if any
   if(is_positive($server['query_timeout']))
     $query_timeout = $server['query_timeout'];
+
+  // Socket operations (connect/read/write) timeout
+  // (default: 5 seconds)
+  $socket_timeout = is_positive($server['sock_timeout']) ?
+                      $server['sock_timeout']:5;
 
   //
   // Leave out contact information
@@ -757,19 +775,24 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
     foreach(explode(',', $server['source']) as $source)
       $sources[] = strtolower(trim($source));
     // Rebuild comma-separated list, without whitespaces
-    $options .= ' -s'.implode(',', $sources);
+    $options .= ' -s '.implode(',', $sources);
   }
 
   // Preferred object type
   if(!empty($object_type))
-    $options .= ' -T'.$object_type;
+    $options .= ' -T '.$object_type;
 
   // Inverse lookup by this attribute
   if(!empty($inverse_lookup_attr))
-    $options .= ' -i'.$inverse_lookup_attr;
+    $options .= ' -i '.$inverse_lookup_attr;
 
   // Prepared queries will be stored here
-  $queries = array();
+  $search = array();
+
+  // If bulk mode is enabled ...
+  if(!empty($begin))
+    // ... add bulk mode start command
+    $whois[] = $begin;
 
   // If bulk mode is enabled multiple queries will be executed
   // query_size number of objects per query. In normal mode,
@@ -777,84 +800,64 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
   // connection
   for($prepared = 0, $num_obj = sizeof($search_list); $prepared < $num_obj; $prepared += $query_size)
     // Prepare a query of query_size number of objects.
-    $queries[] = $begin.$options." ".implode("\n".$options." ", array_slice($search_list, $prepared, $query_size))."\n".$end;
+    $whois[] = array_slice($search_list, $prepared, $query_size);
+  // If bulk mode is enabled ...
+  if(!empty($end))
+    // ... add bulk mode end command
+    $whois[] = $end;
 
   debug_message('info', "Querying server ".$host." ...");
 
   // Found, fully assembled objects go here
   $objects = array();
 
-  // List of objects not found by the search
-  // starts from the full search list and
-  // gets trimmed down with each found object
-  $missing = array_flip($search_list);
+  // Use negative caching ?
+  if($config['cache_negative_results']) {
+    // Dummy entry used as a placeholder in cache
+    // for objects not found by the search
+    $negative_cache_entry = empty($object_type) ?
+                              array('*' => array()):
+                              array($object_type => array());
 
-  // Required by socket_select()
-  $none = NULL;
+    // List of objects not found by the search
+    // starts from a full search list and gets
+    // trimmed down with each found object
+    $missing = array_combine($search_list, array_fill(0, count($search_list), $negative_cache_entry));
+  } else
+    $missing = array();
 
   // Not yet connected
   $sock = false;
 
   // Run all queries
-  foreach($queries as $query) {
+  foreach($whois as $query_args) {
+
+    // Prepare a query of query_size number of objects
+    $query = is_array($query_args) ?
+                $options." ".implode("\r\n".$options." ", $query_args)."\r\n":
+                $query_args;
 
     // Do we need to connect ?
     if($sock === FALSE) {
-
       // Try address families in specified order
       foreach($address_families as $af) {
         // Skip address families not supported
         // by this whois server
         if(!isset($addrs[$host][$af]))
           continue;
-        // Create a TCP socket
-        $sock = socket_create($af, SOCK_STREAM, SOL_TCP);
-        if($sock === FALSE)
-          continue;
-        // Set socket operations timeout
-        socket_set_option($sock, SOL_SOCKET, SO_RCVTIMEO, $snd_rcv_timeout);
-        socket_set_option($sock, SOL_SOCKET, SO_SNDTIMEO, $snd_rcv_timeout);
-        // Make socket non blocking
-        socket_set_nonblock($sock);
-        // Connect attempts cannot go on
-        // beyond connect_deadline
-        $connect_deadline = time() + $socket_timeout;
-        // Keep trying to connect until timeout
-        while(time() < $connect_deadline) {
-          // Initial call will start a connect operation,
-          // while the subsequent calls will just return
-          // the status of the initiated connect operation
-          if(@socket_connect($sock, $addrs[$host][$af], $port) !== FALSE)
-            // If connected successfully, we can proceed
-            break 2;
-          // Otherwise ...
-          $errno = socket_last_error($sock);
-          // ... if error is something other than
-          // "Operation already in progress" ...
-          if(!in_array($errno, array(0, EALREADY, EINPROGRESS))) {
-            debug_message('transport', "Failed to connect to server ".$host.": ".socket_strerror($errno));
-            // ... abort current connect operation
-            // and try the next address family
-            break;
-          }
-          // If a connect operation is in progress,
-          // wait a bit and then go back to check
-          // for status, until operation is complete
-          // or we break the connect deadline
-          sleep(0.001);
+        // Connect to whois server
+        $sock = fsockopen("tcp://[".$addrs[$host][$af]."]", $port, $errno, $errstr, $socket_timeout);
+        if($sock !== FALSE) {
+          // Set socket operations timeout
+          stream_set_timeout($sock, $socket_timeout);
+          break;
         }
-        // Not connected
-        $sock = false;
+        debug_message('transport', "Failed to connect to server ".$host." (".$errno."): ".$errstr);
       }
-
-      // Failed to connect ?
+      // Connection failed ?
       if($sock === FALSE)
         // Abort !
         return false;
-
-      // Clear previous socket errors
-      socket_clear_error($sock);
-
     }
 
     // A single query cannot last
@@ -862,52 +865,34 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
     // that is, beyond query_deadline
     $query_deadline = time() + $query_timeout;
 
-    // Prepare query size counter
-    $total_sent = 0;
-
     // Send whois query
-    for($sent = 0, $query_length = strlen($query);
-        $total_sent < $query_length;
-        $total_sent += $sent) {
-
-      // Query timeout ?
-      if(time() > $query_deadline) {
-        debug_message('info', "Query timed out.");
-        socket_shutdown($sock, 2);
-        socket_close($sock);
-        return false;
-      }
-
-      // Prepare socket for monitoring
-      $write_socks = array($sock);
-
-      // Wait for our socket to become ready,
-      // but no longer than 1 second
-      $num_ready = socket_select($none, $write_socks, $none, 1);
-
-      // Error ?
-      if($num_ready === FALSE) {
-        socket_close($sock);
-        return false;
-      }
-
-      // Connection is idle ?
-      if($num_ready == 0)
-        continue;
-
-      // Send as much as possible in a single call
-      $sent = @socket_send($sock, substr($query, $total_sent), $query_length - $total_sent, 0);
-
-      // Error ?
-      if($sent === FALSE) {
-        socket_close($sock);
-        return false;
-      }
-
-      debug_message('transport', "Sent ".$sent." bytes of whois query.");
+    $sent = @fputs($sock, $query);
+    // If failed to send ...
+    if($sent === FALSE) {
+      debug_message('transport', "Failed to send whois query.");
+      // ... try the next query
+      continue;
     }
 
-    debug_message('transport', "Delivered whois query in full, total of ".$total_sent." bytes.");
+    debug_message('transport', "Delivered whois query in full, total of ".$sent." bytes.");
+
+    // Primary/inverse keys of found objects
+    // must exist in our search list. Otherwise,
+    // Whois database contents are inconsistent
+    // if we received something we didn't ask for.
+    // So far, I've seen this happen with inverse
+    // queries - search for route objects by origin
+    // sometimes produces routes with different
+    // origin attribute
+    $database_is_inconsistent = false;
+    // Flag that tells if previous line was empty
+    $prev_line_was_empty = false;
+    // The number of queried objects
+    $num_queried_objects = substr_count($query, "\r\n");
+    // The number of received result sets
+    $num_result_sets = 0;
+    // Total size of the response
+    $total_received = 0;
 
     // Prepare object parsing variables
     $object = NULL;
@@ -917,278 +902,291 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
     $value = NULL;
     $skip = false;
 
-    // Raise our receive & parse flag
-    $receive = true;
-
-    // Prepare response size counter
-    $total_received = 0;
-
-    // Prepare response data storage
-    $response = "";
-
-    // Read and parse whois response
-    while($receive) {
+    // The number of expected result sets
+    // equals the number of queried objects
+    while($num_result_sets < $num_queried_objects) {
 
       // Query timeout ?
       if(time() > $query_deadline) {
         debug_message('info', "Query timed out.");
-        socket_shutdown($sock, 2);
-        socket_close($sock);
+        fclose($sock);
         return false;
       }
 
-      // Prepare socket for monitoring
-      $read_socks = array($sock);
+      // Get a line of response
+      $line = @fgets($sock);
 
-      // Wait for our socket to become ready,
-      // but no longer than 1 second
-      $num_ready = socket_select($read_socks, $none, $none, 1);
-
-      // Error ?
-      if($num_ready === FALSE) {
-        socket_close($sock);
-        return false;
+      // If reading failed ...
+      if($line === FALSE) {
+        // ... check for EOF
+        $eof = feof($sock);
+        // ... and close the socket
+        fclose($sock);
+        // On error ...
+        if(!$eof) {
+          debug_message('transport', "Socket error.");
+          // ... just end query
+          return false;
+        }
+        debug_message('transport', "Reading complete.");
+        // ... force completion of current object
+        $line = "";
+        // ... force completion of current result set
+        $prev_line_was_empty = true;
+        // ... force read loop to end after this iteration
+        $num_result_sets = $num_queried_objects;
       }
 
-      // Connection is idle ?
-      if($num_ready == 0) {
-        debug_message('transport', "Socket is idle.");
+      // Total size of the response
+      $total_received += strlen($line);
+      // Remove trailing CRLF
+      $line = rtrim($line);
+
+      // Raw Whois output
+      debug_message('raw', $line);
+
+      // A single object inside result set ends on an empty line.
+      // A result set for a queried object ends on two empty lines.
+      // Server response for a multiple object query consists of
+      // multiple result sets. Therefore, result sets are separated
+      // by two empty lines, while objects within result sets are
+      // separated by one.
+      if($line === "") {
+        debug_message('parser', "-------------- EMPTY LINE --------------");
+        // If previous line was blank ...
+        if($prev_line_was_empty)
+          // ... this is the end of a result set
+          $num_result_sets++;
+        else
+          // Remember that this was an empty line
+          $prev_line_was_empty = true;
+        // If object type and raw object data exist ...
+        if(!empty($type) && !empty($object)) {
+          debug_message('parser', $type." object ".$key." assembled raw ...");
+          // ... look for parser for that particular object type
+          $parser = 'parse_'.str_replace('-', '_', $type);
+          // If parser exists ...
+          if(function_exists($parser)) {
+            debug_message('parser', "Passing raw ".$type." object ".$key." to type-specific parser ...");
+            // ... invoke it to replace raw object
+            // with a more refined, parsed form
+            $object = call_user_func($parser, $object);
+          }
+        }
+        // Each entry in the array of objects represents
+        // a single object. However, if searching multiple
+        // sources, each entry can be an array of different
+        // versions of the same object provided by different
+        // sources in the same order sources were searched.
+        // Sources are searched in descending order of
+        // significance, thus we will simply pick the first
+        // (most significant) version of an object and ignore
+        // the rest
+        if(!empty($key) && !empty($object)) {
+          debug_message('parser', "New ".$type." object ".$key." complete.");
+
+          // Begin with assumption that we will be
+          // adding this newly constructed object
+          $add_object = true;
+
+          // If we already have object
+          // with the same primary key ...
+          if(isset($objects[$key])) {
+            // We will check which object is more recent -
+            // the one we already have, or the one we just
+            // put together. We will use 'last-modified'
+            // or 'created' attributes as objects' timestamps.
+            if(isset($objects[$key]['last-modified']))
+              $object_timestamp = $objects[$key]['last-modified'];
+            elseif(isset($objects[$key]['created']))
+              $object_timestamp = $objects[$key]['created'];
+            // We prefer 'last-modified', as it's supposed
+            // to be more recent than 'created', but in case
+            // it's missing, we will use 'created' as object's
+            // timestamp.
+            if(isset($object['last-modified']))
+              $dup_timestamp = $object['last-modified'];
+            elseif(isset($object['created']))
+              $dup_timestamp = $object['created'];
+            // If we cannot determine objects' timestamps,
+            // or the existing object is more recent ...
+            if(empty($object_timestamp) || empty($dup_timestamp) ||
+               $dup_timestamp <= $object_timestamp) {
+              // ... we won't be replacing current object
+              $add_object = false;
+              debug_message('parser', "Discarding duplicate ".$type." object ".$key.".");
+            } else
+              debug_message('parser', "Duplicate ".$type." object ".$key." is more recent version of the object.");
+          }
+
+          // Direct lookup ?
+          if(empty($inverse_lookup_attr)) {
+            // If object's primary key is among
+            // objects we are looking for ...
+            if(in_array($key, $query_args)) {
+              // If we are supposed to add new object ...
+              if($add_object)
+                // ... keep completed object
+                $objects[$key] = $object;
+            // If we got object we didn't ask for ...
+            } else {
+              // ... make a note that whois
+              // database is inconsistent
+              $database_is_inconsistent = true;
+            }
+            // Direct caching enabled ?
+            if($add_object && isset($cache_direct)) {
+              // Cache direct search results and
+              // negative cache missing objects
+              $cache_direct[$key][$type][$key] = $object;
+              debug_message('cache', "Caching direct query result: ".$type." object ".$key);
+              // ... remove it from the list of missing objects
+              unset($missing[$key]);
+            }
+          // Inverse lookup
+          } elseif(isset($object[$inverse_lookup_attr])) {
+            // Inverse index key
+            $inverse_key = $object[$inverse_lookup_attr];
+            // If object's inverse key is among
+            // objects we are looking for inversely ...
+            if(in_array($inverse_key, $query_args)) {
+              // If we are supposed to add new object ...
+              if($add_object)
+                // ... keep completed object
+                $objects[$key] = $object;
+            // If we got object we didn't ask for ...
+            } else {
+              // ... make a note that whois
+              // database is inconsistent
+              $database_is_inconsistent = true;
+            }
+            // Inverse caching enabled ?
+            if($add_object && isset($cache_inverse)) {
+              // Cache object under inverse index
+              $cache_inverse[$inverse_lookup_attr][$inverse_key][$type][$key] = $object;
+              debug_message('cache', "Caching inverse query (".$inverse_lookup_attr."=".$inverse_key.") result: ".$type." object ".$key);
+              // ... remove it from the list of missing objects
+              unset($missing[$inverse_key]);
+            }
+          } else
+            debug_message('cache', $type." object ".$key." from inverse query by ".$inverse_lookup_attr." is missing inverse lookup attribute ".$inverse_lookup_attr.".");
+        }
+
+        // Reset per-object variables
+        $object = NULL;
+        $type = NULL;
+        $key = NULL;
+        $attr = NULL;
+        $value = NULL;
+        $skip = false;
         continue;
       }
 
-      // Socket is ready, there's has data to be read
-      debug_message('transport', "Socket is ready for reading. Receiving response from server.");
+      // This was not an empty line
+      $prev_line_was_empty = false;
 
-      // Drain the socket
-      while($receive) {
+      // Some part of this processing loop determined
+      // that current object should be skipped ...
+      if($skip)
+        continue;
 
-        // Get a part of response
-        $received = @socket_recv($sock, $buffer, 1000000, MSG_WAITALL);
+      // Skip comments
+      if(preg_match('/^\s*%/', $line))
+        continue;
 
-        // Read failed ?
-        if($received === FALSE) {
-          // What exactly happened ?
-          $errno = socket_last_error($sock);
-          switch($errno) {
-            // Nothing to read at the moment ...
-            case EWOULDBLOCK:
-              break 2;
-            // Connection closed ...
-            case ECONNRESET:
-              debug_message('transport', "Server closed the connection.");
-              break;
-            default:
-              // Otherwise it is an error
-              socket_close($sock);
-              debug_message('transport', "Socket error: ".socket_strerror($errno));
-              return false;
-          }
-        }
-
-        // If we recived data ...
-        if($received > 0) {
-          // ... append it to the rest of response data
-          $response .= $buffer;
-          // ... count total bytes received
-          $total_received += $received;
-          debug_message('transport', "Received ".$received." bytes of whois response.");
-        // If there is no more data to read ...
-        } else {
-          // ... in case last returned object was not terminated
-          // with a trailing empty line, we will insert an empty
-          // line to explicitly mark the end of current object
-          $response = "\n";
-          // ... and we are done, drop the flag, end loop(s)
-          $receive = false;
-        }
-
-        // Split response data into lines, if possible.
-        // Resulting array will have N+1 elements, where
-        // N is the number of complete lines, and +1
-        // is the last, incomplete line
-        $lines = explode("\n", $response);
-
-        // Once we parse extracted lines, we will resume
-        // accumulating response data from the last,
-        // incomplete line
-        $response = array_pop($lines);
-
-        // Parse extacted lines
-        foreach($lines as $line) {
-
-          // Object ends on an empty line
-          if($line === "") {
-            debug_message('parser', "-------------- EMPTY LINE --------------");
-            // If object type and raw object data exist ...
-            if(!empty($type) && !empty($object)) {
-              debug_message('parser', $type." object ".$key." assembled raw ...");
-              // ... look for parser for that particular object type
-              $parser = 'parse_'.str_replace('-', '_', $type);
-              // If parser exists ...
-              if(function_exists($parser)) {
-                debug_message('parser', "Passing raw ".$type." object ".$key." to type-specific parser ...");
-                // ... invoke it to replace raw object
-                // with a more refined, parsed form
-                $object = call_user_func($parser, $object);
-              }
+      // Scan current line looking for "attribute: value"
+      if(preg_match('/^([^\s:]+):\s*(.*?)(?:#.*)?$/', $line, $m)) {
+        $attr = strtolower($m[1]);
+        switch($attr) {
+          // Pick attributes we need
+          case 'aut-num':
+          case 'import':
+          case 'export':
+          case 'mp-import':
+          case 'mp-export':
+          case 'as-set':
+          case 'route-set':
+          case 'route6-set':
+          case 'members':
+          case 'route':
+          case 'route6':
+          case 'origin':
+          case 'filter-set':
+          case 'filter':
+            $value = ($attr == $inverse_lookup_attr) ? strtoupper($m[2]):$m[2];
+            break;
+          case 'created':
+          case 'last-modified':
+            $value = strtotime($m[2]);
+            if($value === FALSE || $value == -1) {
+              unset($value);
+              $attr = NULL;
             }
-            // Each entry in the array of objects represents
-            // a single object. However, if searching multiple
-            // sources, each entry can be an array of different
-            // versions of the same object provided by different
-            // sources in the same order sources were searched.
-            // Sources are searched in descending order of
-            // significance, thus we will simply pick the first
-            // (most significant) version of an object and ignore
-            // the rest
-            if(!empty($key) && !empty($object)) {
-              if(!isset($objects[$key])) {
-                $objects[$key] = $object;
-                debug_message('parser', "New ".$type." object ".$key." complete.");
-
-                // Result caching enabled ?
-                if(isset($cache)) {
-
-                  // Direct lookup ?
-                  if(empty($inverse_lookup_attr)) {
-
-                    // Cache direct search results and
-                    // negative cache missing objects
-                    $cache['direct'][$key] = $object;
-                    debug_message('cache', "Caching direct query result: ".$key);
-                    // Remove object from the list of missing objects
-                    unset($missing[$key]);
-
-                  // Inverse lookup
-                  } elseif(isset($object[$inverse_lookup_attr])) {
-
-                    // Cache object under inverse index
-                    $cache['inverse'][$inverse_lookup_attr][$object[$inverse_lookup_attr]][$key] = $object;
-                    debug_message('cache', "Caching object ".$key." from inverse query ".$inverse_lookup_attr." = ".$object[$inverse_lookup_attr]);
-                    // Remove object from the list of missing objects
-                    unset($missing[$object[$inverse_lookup_attr]]);
-
-                  } else
-                    debug_message('cache', "Object ".$key." from inverse query by ".$inverse_lookup_attr." is missing inverse lookup attribute ".$inverse_lookup_attr.".");
-
-                }
-
-              } else
-                debug_message('parser', "Discarding duplicate ".$type." object ".$key.".");
-            }
-            // Reset per-object variables
-            $object = NULL;
-            $type = NULL;
-            $key = NULL;
+            break;
+          // Skip attributes we don't need
+          default:
+            debug_message('parser', "Discarding unneeded attribute ".$attr.".");
             $attr = NULL;
-            $value = NULL;
-            $skip = false;
+            continue 2;
+        }
+
+        // If no object is currently in construction ...
+        if(empty($object) && !empty($attr)) {
+          // ... and the specific attribute was requested,
+          // but doesn't match the source object type ...
+          if(!empty($object_type) && $object_type != $attr) {
+            // ... skip source lines until the next object
+            $skip = true;
+            debug_message('parser', "Skipping filtered ".$attr." object ".$value." (using only ".$object_type." objects).");
             continue;
           }
 
-          // Some part of this processing loop determined
-          // that current object should be skipped ...
-          if($skip)
-            continue;
+          // Otherwise, begin constructing a new object
+          // and remember object's type and primary key
+          $object = array();
+          $key = strtoupper($value);
+          $type = $attr;
 
-          // Skip comments
-          if(preg_match('/^\s*%/', $line))
-            continue;
+          debug_message('parser', "Assembling new ".$type." object ".$key." ...");
+        }
 
-          // Scan current line looking for "attribute: value"
-          if(preg_match('/^([^\s:]+):\s*(.*?)(?:#.*)?$/', $line, $m)) {
-            $attr = strtolower($m[1]);
-            switch($attr) {
-              // Pick attributes we need
-              case 'aut-num':
-              case 'import':
-              case 'export':
-              case 'mp-import':
-              case 'mp-export':
-              case 'as-set':
-              case 'route-set':
-              case 'route6-set':
-              case 'members':
-              case 'route':
-              case 'route6':
-              case 'origin':
-              case 'filter-set':
-              case 'filter':
-                $value = $m[2];
-                break;
-              // Skip attributes we don't need
-              default:
-                debug_message('parser', "Discarding unneeded attribute ".$attr.".");
-                $attr = NULL;
-                continue 2;
-            }
+        // Store attribute into the object in construction
+        if(is_array($object)) {
+          // If attribute already exists ...
+          if(isset($object[$attr])) {
+            // ... and is already an array ...
+            if(is_array($object[$attr]))
+              // ... add value along with others
+              $object[$attr][] = $value;
+            // Otherwise, convert it to array ...
+            else
+              // ... which will now hold both
+              // previous and the current value
+              $object[$attr] = array($object[$attr], $value);
+          // If attribute doesn't exist, create it
+          } else
+            $object[$attr] = $value;
+        }
 
-            // If no object is currently in construction ...
-            if(empty($object) && !empty($attr)) {
-              // ... and the specific attribute was requested,
-              // but doesn't match the source object type ...
-              if(!empty($object_type) && $object_type != $attr) {
-                // ... skip source lines until the next object
-                $skip = true;
-                debug_message('parser', "Skipping filtered ".$attr." object ".$value." (using only ".$object_type." objects).");
-                continue;
-              }
-              // If object with the same primary key already exists ...
-              if(isset($objects[$value])) {
-                // ... skip source lines until the next object
-                $skip = true;
-                debug_message('parser', "Ignoring duplicate ".$attr." object ".$value.".");
-                continue;
-              }
-              // Otherwise, begin constructing a new object
-              // and remember object's type and primary key
-              $object = array();
-              $type = $attr;
-              $key = $value;
-              debug_message('parser', "Assembling new ".$type." object ".$key." ...");
-            }
+      // Line is a continuation of a multiline value ?
+      } elseif(!empty($attr)) {
 
-            // Store attribute into the object in construction
-            if(is_array($object)) {
-              // If attribute already exists ...
-              if(isset($object[$attr])) {
-                // ... and is already an array ...
-                if(is_array($object[$attr]))
-                  // ... add value along with others
-                  $object[$attr][] = $value;
-                // Otherwise, convert it to array ...
-                else
-                  // ... which will now hold both
-                  // previous and the current value
-                  $object[$attr] = array($object[$attr], $value);
-              // If attribute doesn't exist, create it
-              } else
-                $object[$attr] = $value;
-            }
-
-          // Line is a continuation of a multiline value ?
-          } elseif(!empty($attr)) {
-
-            // Remove trash from the current line
-            $value = trim($line);
-            // Append trimmed current line to the existing attribute's value
-            if(!empty($object) && is_array($object)) {
-              // If attribute is an array ...
-              if(is_array($object[$attr])) {
-                // ... and array isn't empty
-                // (shouldn't be at this point) ...
-                $last = count($object[$attr]) - 1;
-                if($last >= 0)
-                  // ... append to the last stored value
-                  $object[$attr][$last] .= ' '.$value;
-              // Otherwise, if attribute holds a single value ...
-              } else
-                // ... simply append to it
-                $object[$attr] .= ' '.$value;
-            }
-
-          }
-
+        // Remove trash from the current line
+        $value = trim($line);
+        // Append trimmed current line to the existing attribute's value
+        if(!empty($object) && is_array($object)) {
+          // If attribute is an array ...
+          if(is_array($object[$attr])) {
+            // ... and array isn't empty
+            // (shouldn't be at this point) ...
+            $last = count($object[$attr]) - 1;
+            if($last >= 0)
+              // ... append to the last stored value
+              $object[$attr][$last] .= ' '.$value;
+          // Otherwise, if attribute holds a single value ...
+          } else
+            // ... simply append to it
+            $object[$attr] .= ' '.$value;
         }
 
       }
@@ -1197,28 +1195,53 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
 
     debug_message('transport', "Received whois response in full, total of ".$total_received." bytes.");
 
-    // Close connection
-    socket_close($sock);
-    $sock = false;
+    // If whois database is inconsistent ...
+    if($database_is_inconsistent) {
+      // ... we cannot be sure that negative cache
+      // will be consistent, so we will NOT negative
+      // cache any object from this query
+      $missing = array_diff_key($missing, array_flip($query_args));
+      debug_message('cache', "Search results for the following will be excluded from negative caching due to database inconsistency: [", $query_args, "].");
+    }
+
+    // If we are supposed to reconnect on each query,
+    // at this point, server has probably closed
+    // the connection on it's end ...
+    if($reconnect_on_query) {
+      // ... therefore, we should clean up ...
+      fclose($sock);
+      // ... and mark the socket 'no longer valid'
+      // to trigger reconnect on the next query
+      $sock = false;
+    }
 
   }
 
-  // Result caching enabled ?
-  if(isset($cache)) {
-    // Direct lookup ?
-    if(empty($inverse_lookup_attr)) {
+  // If socket is still there ...
+  if($sock !== FALSE)
+    // ... close the connection
+    fclose($sock);
+
+  // Direct lookup ?
+  if(empty($inverse_lookup_attr)) {
+    // Direct caching enabled ?
+    if(isset($cache_direct)) {
       // Negative cache objects not found by direct query
-      $cache['direct'] = array_merge($cache['direct'], $missing);
+      $cache_direct = array_merge_recursive($cache_direct, $missing);
       if(!empty($missing))
         debug_message('cache', "Negative caching direct query results: [", array_keys($missing), "].");
-    } else {
+    }
+  } else {
+    // Inverse caching enabled ?
+    if(isset($cache_inverse)) {
       // Negative cache objects not found by inverse query
-      $cache['inverse'][$inverse_lookup_attr] = array_merge($cache['inverse'][$inverse_lookup_attr], $missing);
+      $cache_inverse[$inverse_lookup_attr] = isset($cache_inverse[$inverse_lookup_attr]) ?
+                                               array_merge_recursive($cache_inverse[$inverse_lookup_attr], $missing):
+                                               $missing;
       if(!empty($missing))
         debug_message('cache', "Negative caching results from inverse query by ".$inverse_lookup_attr.": [", array_keys($missing), "].");
     }
   }
-
   // At this point, all queries have been executed
   return $objects;
 }
@@ -1226,44 +1249,92 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
 function whois_query($search_list, $object_type=NULL, $inverse_lookup_attr=NULL, &$servers=NULL)
 {
   global $config;
-  static $cache;
+  static $cache_direct;
+  static $cache_inverse;
 
   // Don't waste time ...
   if(empty($search_list))
     return;
 
   // Make sure this is always a list
-  if(!is_array($search_list))
-    $search_list = array($search_list);
+  // of uppercase object names
+  $search_list = array_change_key_case(is_array($search_list) ?
+                                           $search_list:array($search_list),
+                                       CASE_UPPER);
+
+  $use_cache_direct = $config['cache_whois_direct'];
+  $use_cache_inverse = $config['cache_whois_inverse'];
 
   // Initialize the cache on the first run
-  if(!isset($cache))
-    $cache = array('direct' => array(), 'inverse' => array());
+  if(!isset($cache_direct) && $use_cache_direct)
+    $cache_direct = array();
+  if(!isset($cache_inverse) && $use_cache_inverse)
+    $cache_inverse = array();
 
   $cache_hits = array();
 
   // Direct lookup ?
   if(!isset($inverse_lookup_attr)) {
-
-    // Search objects in cache by primary key
-    $cache_hits = array_intersect_key($cache['direct'], array_flip($search_list));
-
-    if(count($cache_hits) > 0) {
-      debug_message('cache', "Direct query cache hits: [", array_keys($cache_hits), "]");
-      $search_list = array_diff($search_list, array_keys($cache['direct']));
-    }
-
+    $cache =& $cache_direct;
+    $query_type = "Direct";
   // Inverse lookup
-  } elseif(isset($cache['inverse'][$inverse_lookup_attr])) {
+  } elseif(isset($cache_inverse[$inverse_lookup_attr])) {
+    $cache =& $cache_inverse[$inverse_lookup_attr];
+    $query_type = "Inverse";
+  }
 
-    // Search objects in cache inversely, by given attribute
-    $cache_hits = array_intersect_key($cache['inverse'][$inverse_lookup_attr], array_flip($search_list));
-
-    if(count($cache_hits) > 0) {
-      debug_message('cache', "Inverse query cache hits: [", array_keys($cache_hits), "]");
-      $search_list = array_diff($search_list, array_keys($cache['inverse'][$inverse_lookup_attr]));
+  if(!empty($cache)) {
+    // Select all cache indexes
+    // given in the search list
+    $selected_indexes = array_intersect_key($cache, array_flip($search_list));
+    if(count($selected_indexes) > 0) {
+      // Each cache index stores objects grouped by type.
+      // Since we may have selected multiple indexes,
+      // we will merge objects-by-type from each index
+      // into a cumulative result
+      $objects_by_type = call_user_func_array('array_merge_recursive', $selected_indexes);
+      if(count($objects_by_type) > 0) {
+        // If no specific object type was requested ...
+        if(empty($object_type))
+          // ... merge all found objects of all types
+          // and return them as cache hits
+          $cache_hits = call_user_func_array('array_merge_recursive', $objects_by_type);
+        // If specific object type was requested ...
+        elseif(isset($objects_by_type[$object_type]))
+          // ... use all found objects
+          // of that particular type
+          $cache_hits = $objects_by_type[$object_type];
+        // Index of cache hits
+        $hits_indexes = array_keys($cache_hits);
+        // If lookup was inverse ...
+        if(!empty($inverse_lookup_attr)) {
+          // ... we will select inverse indexes
+          // which map to cache hits objects
+          $hits_indexes = array_keys(
+                              array_filter($selected_indexes,
+                                           function($index) use($hits_indexes) {
+                                             // Objects mapped to current cache index
+                                             $objects = call_user_func_array('array_merge_recursive', $index);
+                                             $object_keys = array_keys($objects);
+                                             // If current index is negative cached
+                                             // or all objects mapped to current index
+                                             // exist in the cache ...
+                                             if(empty($objects) || count(array_intersect($hits_indexes, $object_keys)) == count($object_keys))
+                                               // ... assume index is cached
+                                               return true;
+                                             // Otherwise, assume index is not cached
+                                             return false;
+                                           }
+                              )
+                            );
+        }
+        // Don't search for indexes found in cache
+        $search_list = array_diff($search_list, $hits_indexes);
+      }
     }
-
+    // We have cache hits
+    if(count($cache_hits) > 0)
+      debug_message('cache', $query_type." query cache hits: [", array_keys($cache_hits), "]");
   }
 
   // If all objects have been found in cache ...
@@ -1293,7 +1364,8 @@ function whois_query($search_list, $object_type=NULL, $inverse_lookup_attr=NULL,
                                   $search_list,
                                   $object_type,
                                   $inverse_lookup_attr,
-                                  $cache);
+                                  $cache_direct,
+                                  $cache_inverse);
     // If query failed ...
     if($objects === false) {
       if(isset($servers[0]['server']) &&
@@ -1306,7 +1378,6 @@ function whois_query($search_list, $object_type=NULL, $inverse_lookup_attr=NULL,
       // ... try the next server
       continue;
     }
-
     // Return cache hits and search results combined
     return array_merge($cache_hits, $objects);
   }
@@ -2250,6 +2321,9 @@ function get_announced_prefixes($from_asn, $to_asn, $family=AF_INET, $include_as
   $announced = array();
 
   foreach($routes as $prefix => $objects) {
+    // Skip negative cache hits
+    if(empty($objects))
+      continue;
     // Make sure this is always an array even
     // if it contains a single route object
     if(is_rpsl_object($objects))

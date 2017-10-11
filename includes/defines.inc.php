@@ -1,7 +1,7 @@
 <?php
 /*
 
- Copyright (c) 2015 Marko Dinic <marko@yu.net>. All rights reserved.
+ Copyright (c) 2017 Marko Dinic <marko@yu.net>. All rights reserved.
 
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -68,12 +68,13 @@ define('RPSL_OBJECTS',    0x80000000);     // Return full objects instead of pri
 // Debug message categories
 define('info',            0x00000001);
 define('transport',       0x00000002);
-define('parser',          0x00000004);
-define('cache',           0x00000008);
-define('preprocessor',    0x00000010);
-define('rpsl',            0x00000020);
-define('expression',      0x00000040);
-define('as-path',         0x00000080);
+define('raw',             0x00000004);
+define('parser',          0x00000008);
+define('cache',           0x00000010);
+define('preprocessor',    0x00000020);
+define('rpsl',            0x00000040);
+define('expression',      0x00000080);
+define('as-path',         0x00000100);
 define('php',             0x80000000);
 define('all',             0xffffffff);
 define('full',            0xffffffff);

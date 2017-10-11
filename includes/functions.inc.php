@@ -1,7 +1,7 @@
 <?php
 /*
 
- Copyright (c) 2015 Marko Dinic <marko@yu.net>. All rights reserved.
+ Copyright (c) 2017 Marko Dinic <marko@yu.net>. All rights reserved.
 
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -806,6 +806,8 @@ function update_template_by_id($id, &$log='')
   foreach($ids as $id) {
     status_message("Updating autopolicy template ".$id." ...", $log);
 
+    $start_time = microtime(true);
+
     // Load specific autopolicy template
     $autotemplate = load_template($config['templates_dir'].'/autopolicy/'.$id);
     if(!isset($autotemplate)) {
@@ -815,8 +817,13 @@ function update_template_by_id($id, &$log='')
 
     // Generate config templates from autopolicy template
     $template = update_template($autotemplate, $log);
+
+    // Calculate the duration of the update
+    // (in seconds), rounded to 2 decimals
+    $duration = round(microtime(true) - $start_time, 2);
+
     if(!isset($template)) {
-      status_message("Autopolicy ".$id." update failed.", $log);
+      status_message("Autopolicy ".$id." update failed after ".$duration." seconds.", $log);
       continue;
     }
     // Make XML output properly formatted
@@ -824,10 +831,8 @@ function update_template_by_id($id, &$log='')
     // Save updated template to the policy directory
     $template->save($config['templates_dir'].'/policy/'.$id);
 
-    status_message("Autopolicy ".$id." successfully updated.", $log);
+    status_message("Autopolicy ".$id." successfully updated after ".$duration." seconds.", $log);
   }
-
-//  status_message("Done.", $log);
 
   return true;
 }
@@ -862,8 +867,6 @@ function update_all_templates(&$log='')
     $template->save($config['templates_dir'].'/policy/'.$filename);
   }
 
-//  status_message("Done.", $log);
-
   return true;
 }
 
@@ -883,21 +886,27 @@ function update_templates($id=NULL)
 
   $log = '';
 
+  $start_time = microtime(true);
+
   // Update autopolicies
   $res = empty($ids) ?
             update_all_templates($log):
             update_template_by_id($ids, $log);
 
+  // Calculate the duration of the update
+  // (in seconds), rounded to 2 decimals
+  $duration = round(microtime(true) - $start_time, 2);
+
   // If update was successful ..
   if($res) {
     // ... commit changes in the repository
     vcs_commit($config['templates_dir'], $log);
-    status_message("Done.", $log);
+    status_message("Done after ".$duration." seconds in total.", $log);
   // Otherwise ...
   } else {
     // ... reset to last good commit
     vcs_reset();
-    status_message("Failed.", $log);
+    status_message("Failed after ".$duration." seconds in total.", $log);
   }
 
   return $res;

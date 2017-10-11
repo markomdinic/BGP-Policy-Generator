@@ -10,9 +10,7 @@ $config['whois'][] = array(
   'type'                  => "ripe",
 //  'family'                => "inet6,inet",
 //  'source'                => "ripe",
-//  'sock_timeout'          => 5,
-//  'query_timeout'         => 1800,
-//  'query_size'            => 1000
+//  'sock_timeout'          => 30
 );
 // Second server to be queried
 $config['whois'][] = array(
@@ -21,10 +19,35 @@ $config['whois'][] = array(
   'type'                  => "irrd",
 //  'family'                => "inet",
 //  'source'                => "ripe,arin,radb",
-//  'sock_timeout'          => 5,
+//  'sock_timeout'          => 30,
 //  'query_timeout'         => 1800,
-//  'query_size'            => 1000
+//  'query_size'            => 100
 );
+
+// Cache responses from Whois direct queries.
+// Use to speed up traversing the hierarchy of
+// aut-num/as-set objects during as-set expansion
+// and as-path tracing.
+$config['cache_whois_direct'] = true;
+
+// Cache responses from Whois inverse queries.
+// Use to speed up prefix lookups when doing
+// multiple autopolicy updates.
+//
+// WARNING! caching is based on asumption that
+// RIR database is consistent. However, some
+// inverse queries produce wrong/outdated results.
+// Thus, we can end up caching the wrong thing
+// and ignoring the right one. Use with caution
+// or, better yet, do not use at all.
+$config['cache_whois_inverse'] = false;
+
+// Cache negative results from Whois queries.
+// Use to reduce the number of queried objects
+// when doing multiple autopolicy updates. Avoid
+// if you find your Whois servers of choice to
+// have inconsistent databases.
+$config['cache_negative_results'] = true;
 
 // Personality to use for commits
 // and notification emails
