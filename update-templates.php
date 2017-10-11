@@ -21,7 +21,7 @@
 
 function usage()
 {
-  echo("\nBGP Policy Generator v".VERSION." (Oct 11 2017)\n\n");
+  echo("\nBGP Policy Generator v".RELEASE_VERSION." (".RELEASE_DATE.")\n\n");
   echo("Usage: ".basename(realpath(__FILE__))." [--help|-h] [autopolicy1_name[,autopolicy2_name,...]]\n\n");
   exit(255);
 }

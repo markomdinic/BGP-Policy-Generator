@@ -19,7 +19,8 @@
 */
 
 // BGP Policy Generator's current version
-define('VERSION',         '0.1');
+define('RELEASE_VERSION', '0.1.1');
+define('RELEASE_DATE',    'Oct 12 2017');
 
 // Address families
 if(!defined('AF_INET'))

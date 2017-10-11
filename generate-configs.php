@@ -21,7 +21,7 @@
 
 function usage()
 {
-  echo("\nBGP Policy Generator v".VERSION." (Oct 11 2017)\n\n");
+  echo("\nBGP Policy Generator v".RELEASE_VERSION." (".RELEASE_DATE.")\n\n");
   echo("Usage: ".basename(realpath(__FILE__))." [OPTIONS] <platform> <config_type> [template_id1[,template_id2,...]]\n\n");
   echo(" --help|-h                      This help message\n");
   echo(" --before|-b <date>             Generate first configuration before this date\n");

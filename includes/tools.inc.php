@@ -287,7 +287,7 @@ function prefix_aggregator32($nonaggregated, $address_length=32)
   // Sort prefixes by network addresses in ascending order
   // to prevent searching for neighboring address blocks
   // across entire prefix list
-  ksort($nonaggregated);
+  ksort($nonaggregated, SORT_NATURAL);
 
   // Get the first prefix in the list of sorted network addresses
   $pending_aggregated_block_network_address =  key($nonaggregated);
@@ -379,7 +379,7 @@ function prefix_aggregator64($nonaggregated, $address_length=32)
   // Sort prefixes by network addresses in ascending order
   // to prevent searching for neighboring address blocks
   // across entire prefix list
-  ksort($nonaggregated);
+  ksort($nonaggregated, SORT_NATURAL);
 
   // Get the first prefix in the list of sorted network addresses
   $pending_aggregated_block_network_address = key($nonaggregated);
@@ -455,7 +455,7 @@ function filter_more_specific($nonaggregated, $address_length=32)
   // Sort prefixes by network addresses in ascending order
   // to prevent searching for neighboring address blocks
   // across entire prefix list
-  ksort($nonaggregated);
+  ksort($nonaggregated, SORT_NATURAL);
 
   // Get the first prefix in the list of sorted network addresses
   $first_network_address =  key($nonaggregated);

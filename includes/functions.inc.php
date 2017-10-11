@@ -509,7 +509,7 @@ function update_template($autotemplate, &$statusmsg="")
           $name_prepend = is_name($p->nodeValue) ? ($p->nodeValue).'-':'';
 
           // Sort prefixes by ASn
-          ksort($announced['prefixes']);
+          ksort($announced['prefixes'], SORT_NATURAL);
 
           // Loop through all collected routing data
           foreach($announced['prefixes'] as $origin_as => $prefixes) {
@@ -528,6 +528,7 @@ function update_template($autotemplate, &$statusmsg="")
             // Extract AS number from ASN
             if(!preg_match('/^(?:AS)?(\d+)$/i', $origin_as, $m))
               continue;
+
             $origin_as = $m[1];
 
             // Skip if current ASN doesn't match
@@ -557,7 +558,7 @@ function update_template($autotemplate, &$statusmsg="")
             }
 
             // Sort prefixes
-            sort($prefixes);
+            sort($prefixes, SORT_NATURAL);
 
             // Add prefixes to the prefix list
             foreach($prefixes as $prefix) {
