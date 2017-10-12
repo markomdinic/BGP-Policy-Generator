@@ -45,10 +45,9 @@ include $config['base_dir']."/config.php";
 // Load common code library
 include $config['includes_dir']."/functions.inc.php";
 
-// Unless debug is set to full ...
-if(!isset($config['debug']) ||
-   !($config['debug'] & 'php'))
-  // ... supress PHP messages
+// Unless debug has 'php' set ...
+if(!(debug_mask() & constant('php')))
+  // ... suppress PHP messages
   error_reporting(~E_ALL);
 
 // Set the default time zone

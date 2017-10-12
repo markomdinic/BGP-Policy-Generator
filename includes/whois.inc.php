@@ -812,7 +812,8 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
   $objects = array();
 
   // Use negative caching ?
-  if($config['cache_negative_results']) {
+  if(isset($config['cache_negative_results']) &&
+     $config['cache_negative_results']) {
     // Dummy entry used as a placeholder in cache
     // for objects not found by the search
     $negative_cache_entry = empty($object_type) ?
@@ -909,7 +910,7 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
       // Query timeout ?
       if(time() > $query_deadline) {
         debug_message('info', "Query timed out.");
-        fclose($sock);
+        @fclose($sock);
         return false;
       }
 
@@ -921,7 +922,7 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
         // ... check for EOF
         $eof = feof($sock);
         // ... and close the socket
-        fclose($sock);
+        @fclose($sock);
         // On error ...
         if(!$eof) {
           debug_message('transport', "Socket error.");
@@ -1209,7 +1210,7 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
     // the connection on it's end ...
     if($reconnect_on_query) {
       // ... therefore, we should clean up ...
-      fclose($sock);
+      @fclose($sock);
       // ... and mark the socket 'no longer valid'
       // to trigger reconnect on the next query
       $sock = false;
@@ -1220,7 +1221,7 @@ function whois_query_server($server, $search_list, $object_type=NULL, $inverse_l
   // If socket is still there ...
   if($sock !== FALSE)
     // ... close the connection
-    fclose($sock);
+    @fclose($sock);
 
   // Direct lookup ?
   if(empty($inverse_lookup_attr)) {
@@ -1262,8 +1263,11 @@ function whois_query($search_list, $object_type=NULL, $inverse_lookup_attr=NULL,
                                            $search_list:array($search_list),
                                        CASE_UPPER);
 
-  $use_cache_direct = $config['cache_whois_direct'];
-  $use_cache_inverse = $config['cache_whois_inverse'];
+  $use_cache_direct = isset($config['cache_whois_direct']) ?
+                              $config['cache_whois_direct']:false;
+
+  $use_cache_inverse = isset($config['cache_whois_inverse']) ?
+                               $config['cache_whois_inverse']:false;
 
   // Initialize the cache on the first run
   if(!isset($cache_direct) && $use_cache_direct)

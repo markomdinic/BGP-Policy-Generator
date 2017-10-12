@@ -42,9 +42,8 @@ include $config['includes_dir']."/functions.inc.php";
 if(empty($config['on_change']))
   exit(0);
 
-// Unless debug is set to full ...
-if(!isset($config['debug']) ||
-   !($config['debug'] & 'php'))
+// Unless debug has 'php' set ...
+if(!(debug_mask() & constant('php')))
   // ... suppress PHP messages
   error_reporting(~E_ALL);
 

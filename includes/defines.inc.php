@@ -19,8 +19,8 @@
 */
 
 // BGP Policy Generator's current version
-define('RELEASE_VERSION', '0.1.2');
-define('RELEASE_DATE',    'Oct 12 2017');
+define('RELEASE_VERSION', '0.1.3');
+define('RELEASE_DATE',    'Oct 13 2017');
 
 // Address families
 if(!defined('AF_INET'))
@@ -82,5 +82,8 @@ define('as-path',         0x00000100);
 define('php',             0x80000000);
 define('all',             0xffffffff);
 define('full',            0xffffffff);
+
+// Misc
+define('EOL',             php_sapi_name() == 'cli' ? PHP_EOL:'<br>'.PHP_EOL);
 
 ?>

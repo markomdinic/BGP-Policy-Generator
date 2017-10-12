@@ -509,7 +509,7 @@ function update_template($autotemplate, &$statusmsg="")
           $name_prepend = is_name($p->nodeValue) ? ($p->nodeValue).'-':'';
 
           // Sort prefixes by ASn
-          ksort($announced['prefixes'], SORT_NATURAL);
+          uksort($announced['prefixes'], 'strnatcmp');
 
           // Loop through all collected routing data
           foreach($announced['prefixes'] as $origin_as => $prefixes) {
@@ -551,7 +551,7 @@ function update_template($autotemplate, &$statusmsg="")
             }
 
             // Sort prefixes
-            sort($prefixes, SORT_NATURAL);
+            natsort($prefixes);
 
             // Add prefixes to the prefix list
             foreach($prefixes as $prefix) {
@@ -791,8 +791,8 @@ function update_template_by_id($id, &$log='')
   if(empty($id))
     return false;
 
-  if(php_sapi_name() != "cli")
-    header('Content-Type: ', 'text/plain');
+  if(php_sapi_name() != 'cli')
+    header('Content-Type: text/plain');
 
   // Make sure this is always array
   $ids = is_array($id) ? $id:array($id);
@@ -837,8 +837,8 @@ function update_all_templates(&$log='')
 {
   global $config;
 
-  if(php_sapi_name() != "cli")
-    header('Content-Type: ', 'text/plain');
+  if(php_sapi_name() != 'cli')
+    header('Content-Type: text/plain');
 
   // Load all autopolicy templates
   $autotemplates = load_templates($config['templates_dir'].'/autopolicy');

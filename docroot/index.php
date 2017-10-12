@@ -58,10 +58,13 @@ elseif(!empty($_GET['after']))
 else
   $time = NULL;
 
-if($platform == 'template' && $type == 'update')
+if($platform == 'template' && $type == 'update') {
+  while(@ob_end_flush());
+  ob_implicit_flush(true);
+  ob_flush();
   // Update autopolicies
   update_templates($id);
-else {
+} else {
   // Generate device configuration
   $formatted_conf = generate_configs($platform, $type, $id, $time);
   // Display generated configuration

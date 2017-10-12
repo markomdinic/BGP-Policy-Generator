@@ -50,16 +50,39 @@ function drop_privileges()
   }
 }
 
-function status_message($msg, &$log=NULL)
+function status_message($message, &$log=NULL)
 {
-  if(empty($msg))
+  if(empty($message))
     return '';
 
-  // Show status message
-  echo($msg."\n");
   // Accumulate messages in the log
   if(isset($log))
-    $log .= $msg."\n";
+    $log .= $message."\n";
+
+  // Replace all plain newlines with
+  // runtime environment specific
+  // alternative
+  $message = str_replace("\n", EOL, $message);
+
+  // Show status message
+  echo($message.EOL);
+}
+
+function debug_mask()
+{
+  global $config;
+
+  if(!isset($config['debug']) ||
+      empty($config['debug']))
+    return 0;
+
+  $debug = is_array($config['debug']) ?
+             $config['debug']:
+             array(($config['debug'] === true) ?
+                            'info':$config['debug']);
+
+  // Bitmask of requested debug categories
+  return array_sum(array_map('constant', $debug));
 }
 
 function debug_message()
@@ -78,13 +101,8 @@ function debug_message()
   if(empty($category))
     return;
 
-  $debug = is_array($config['debug']) ?
-             $config['debug']:
-             array(($config['debug'] === true) ?
-                            'info':$config['debug']);
-
   // Bitmask of requested debug categories
-  $debug_mask = array_sum(array_map('constant', $debug));
+  $debug_mask = debug_mask();
   // Bitmask that represents this message's category
   $category_mask = constant($category);
   if(!isset($category_mask)) {
@@ -110,7 +128,8 @@ function debug_message()
       $message .= " ";
     }
 
-    echo("[".$category."] ".trim($message)."\n");
+    echo("[".$category."] ".str_replace("\n", EOL, trim($message)).EOL);
+
   }
 }
 
@@ -287,7 +306,7 @@ function prefix_aggregator32($nonaggregated, $address_length=32)
   // Sort prefixes by network addresses in ascending order
   // to prevent searching for neighboring address blocks
   // across entire prefix list
-  ksort($nonaggregated, SORT_NATURAL);
+  uksort($nonaggregated, 'strnatcmp');
 
   // Get the first prefix in the list of sorted network addresses
   $pending_aggregated_block_network_address =  key($nonaggregated);
@@ -379,7 +398,7 @@ function prefix_aggregator64($nonaggregated, $address_length=32)
   // Sort prefixes by network addresses in ascending order
   // to prevent searching for neighboring address blocks
   // across entire prefix list
-  ksort($nonaggregated, SORT_NATURAL);
+  uksort($nonaggregated, 'strnatcmp');
 
   // Get the first prefix in the list of sorted network addresses
   $pending_aggregated_block_network_address = key($nonaggregated);
@@ -455,7 +474,7 @@ function filter_more_specific($nonaggregated, $address_length=32)
   // Sort prefixes by network addresses in ascending order
   // to prevent searching for neighboring address blocks
   // across entire prefix list
-  ksort($nonaggregated, SORT_NATURAL);
+  uksort($nonaggregated, 'strnatcmp');
 
   // Get the first prefix in the list of sorted network addresses
   $first_network_address =  key($nonaggregated);
