@@ -19,7 +19,7 @@
 */
 
 // BGP Policy Generator's current version
-define('RELEASE_VERSION', '0.1.1');
+define('RELEASE_VERSION', '0.1.2');
 define('RELEASE_DATE',    'Oct 12 2017');
 
 // Address families

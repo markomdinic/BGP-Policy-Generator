@@ -22,7 +22,7 @@
 function usage()
 {
   echo("\nBGP Policy Generator v".RELEASE_VERSION." (".RELEASE_DATE.")\n\n");
-  echo("Usage: ".basename(realpath(__FILE__))." [--help|-h] [autopolicy1_name[,autopolicy2_name,...]]\n\n");
+  echo("Usage: ".basename(realpath(__FILE__))." [--help|-h] [--all|-a|autopolicy1_name[,autopolicy2_name,...]]\n\n");
   exit(255);
 }
 
@@ -57,29 +57,35 @@ date_default_timezone_set(empty($config['timezone']) ? 'UTC':$config['timezone']
 // Skip script name
 array_shift($argv);
 
+// There must be at least 1 argument
+if(empty($argv))
+  usage();
+
+$all = false;
+$id = NULL;
+
 // Get optional parameters
 while(count($argv) > 0) {
   $arg = array_shift($argv);
-  if(empty($arg))
-    break;
   switch($arg) {
     case '-h':
     case '--help':
       usage();
+    case '-a':
+    case '--all':
+      $all = true;
       break;
     default:
-      $args[] = $arg;
+      if($all || isset($id))
+        usage();
+      $id = $arg;
       break;
   }
 }
 
-// There has to be no more than 1 argument
-if(!empty($args) && count($args) > 1)
-  usage();
+// Update specified autopolicies
+update_templates($all ? NULL:$id);
 
-$id = empty($args[0]) ? NULL:$args[0];
-
-// Update autopolicies
-update_templates($id);
+exit(0);
 
 ?>

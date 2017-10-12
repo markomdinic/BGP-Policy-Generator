@@ -514,13 +514,6 @@ function update_template($autotemplate, &$statusmsg="")
           // Loop through all collected routing data
           foreach($announced['prefixes'] as $origin_as => $prefixes) {
 
-            // Without prefixes we have nothing to do
-//            if(!isset($as_data['prefixes']))
-//              continue;
-
-            // Prefixes originated by this AS
-//            $prefixes = $as_data['prefixes'];
-
             // AS paths from local AS to this AS
             if(isset($announced['as_paths'][$origin_as]))
               $as_paths = $announced['as_paths'][$origin_as];
@@ -805,7 +798,7 @@ function update_template_by_id($id, &$log='')
   $ids = is_array($id) ? $id:array($id);
 
   foreach($ids as $id) {
-    status_message("Updating autopolicy template ".$id." ...", $log);
+    status_message("Updating autopolicy ".$id." ...\n", $log);
 
     // Load specific autopolicy template
     $autotemplate = load_template($config['templates_dir'].'/autopolicy/'.$id);
@@ -824,7 +817,7 @@ function update_template_by_id($id, &$log='')
 
     // If template update failed ...
     if(!isset($template)) {
-      status_message("Autopolicy ".$id." update failed after ".$duration." seconds.", $log);
+      status_message("Autopolicy ".$id." update failed after ".$duration." seconds.\n", $log);
       // ... move on to the next template
       continue;
     }
@@ -834,7 +827,7 @@ function update_template_by_id($id, &$log='')
     // Save updated template to the policy directory
     $template->save($config['templates_dir'].'/policy/'.$id);
 
-    status_message("Autopolicy ".$id." successfully updated after ".$duration." seconds.", $log);
+    status_message("Autopolicy ".$id." successfully updated after ".$duration." seconds.\n", $log);
   }
 
   return true;
@@ -854,10 +847,10 @@ function update_all_templates(&$log='')
     return false;
   }
 
-  status_message("Updating all autopolicy templates ...", $log);
+  status_message("Updating all autopolicies ...\n", $log);
 
   // Process all autopolicy template files
-  foreach($autotemplates as $filename => $autotemplate) {
+  foreach($autotemplates as $id => $autotemplate) {
     // Update operations' start time
     $start_time = microtime(true);
     // Update template from autopolicy template
@@ -868,7 +861,7 @@ function update_all_templates(&$log='')
 
     // If template update failed ...
     if(!isset($template)) {
-      status_message("Autopolicy update failed after ".$duration." seconds.", $log);
+      status_message("Autopolicy ".$id." update failed after ".$duration." seconds.\n", $log);
       // ... move on to the next template
       continue;
     }
@@ -876,9 +869,9 @@ function update_all_templates(&$log='')
     // Make XML output properly formatted
     $template->formatOutput = true;
     // Save updated template to the policy directory
-    $template->save($config['templates_dir'].'/policy/'.$filename);
+    $template->save($config['templates_dir'].'/policy/'.$id);
 
-    status_message("Autopolicy successfully updated after ".$duration." seconds.", $log);
+    status_message("Autopolicy ".$id." successfully updated after ".$duration." seconds.\n", $log);
   }
 
   return true;
@@ -914,13 +907,13 @@ function update_templates($id=NULL)
   // If update was successful ..
   if($res) {
     // ... commit changes in the repository
-    vcs_commit($config['templates_dir'], $log);
     status_message("Done after ".$duration." seconds in total.", $log);
+    vcs_commit($config['templates_dir'], $log);
   // Otherwise ...
   } else {
     // ... reset to last good commit
-    vcs_reset();
     status_message("Failed after ".$duration." seconds in total.", $log);
+    vcs_reset();
   }
 
   return $res;
