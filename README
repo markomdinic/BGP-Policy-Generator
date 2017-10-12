@@ -223,9 +223,9 @@ configurations from shell, invoke
 By default, generate-configs.php dumps generated configuration to stdout, but you
 can send it via email and/or save it to file instead.
 
-To update autopolicies from shell, invoke
+To update all autopolicies from shell, invoke
 
-  <installdir>/update-templates.php
+  <installdir>/update-templates.php -a
 
 To update specific autopolicy from shell, invoke
 
