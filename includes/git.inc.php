@@ -107,7 +107,7 @@ function git_list_before($time)
   if(empty($time))
     return false;
 
-  return git('rev-list', '--before', $time, 'master');
+  return git('rev-list', '--before="'.$time.'"', 'master');
 }
 
 function git_list_after($time)
@@ -115,7 +115,7 @@ function git_list_after($time)
   if(empty($time))
     return false;
 
-  return git('rev-list', '--after', $time, 'master');
+  return git('rev-list', '--after="'.$time.'"', 'master');
 }
 
 ?>
